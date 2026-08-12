@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Marshal Lineup System — Join an Event</title>
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<div class="app-header">
+  <h1>Marshal Lineup System</h1>
+  <div class="user-info">
+    <span id="welcomeText"></span>
+    <span class="badge">Marshal</span>
+    <button class="btn-outline btn-small" id="logoutBtn" style="color:white;border-color:white;">Log Out</button>
+  </div>
+</div>
+
+<div class="container" style="max-width: 720px;">
+  <div class="card-panel">
+    <h2>Sign Up For Events</h2>
+    <p style="color:#666;font-size:13.5px;margin-top:-4px;">
+      Select every event you're available for and every role you're willing to fill.
+      Submitting again will replace your previous selection.
+    </p>
+
+    <div id="alertBox"></div>
+    <div id="currentSubmissionBox"></div>
+
+    <form id="marshalForm">
+      <h3 style="margin-top:20px;">Events</h3>
+      <div id="eventsCheckboxGrid" class="checkbox-grid">
+        <p style="color:#888;">Loading events…</p>
+      </div>
+
+      <h3>Roles</h3>
+      <div id="rolesCheckboxGrid" class="checkbox-grid"></div>
+
+      <button type="submit" class="btn-primary btn-block">Submit</button>
+    </form>
+  </div>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/marshal.js"></script>
+</body>
+</html>

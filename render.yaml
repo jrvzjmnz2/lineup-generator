@@ -1,0 +1,30 @@
+# Render Blueprint for the Marshal Lineup System.
+# In the Render dashboard: New + -> Blueprint -> connect this repo -> Apply.
+# Render will create the web service below; you'll still need to fill in the
+# "sync: false" environment variables yourself in the dashboard (they're
+# secrets, so they're intentionally left out of this file / the repo).
+services:
+  - type: web
+    name: marshal-lineup-system
+    runtime: node
+    plan: free
+    region: singapore
+    branch: main
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: MONGO_URI
+        sync: false
+      - key: MONGO_DB_NAME
+        value: lineup
+      - key: JWT_SECRET
+        sync: false
+      - key: SEED_ADMIN_USERNAME
+        sync: false
+      - key: SEED_ADMIN_EMAIL
+        sync: false
+      - key: SEED_ADMIN_PASSWORD
+        sync: false
+      - key: DNS_SERVERS
+        value: 8.8.8.8,1.1.1.1

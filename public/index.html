@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Marshal Lineup System — Login</title>
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<div class="auth-shell">
+  <div class="auth-card">
+    <h1>Marshal Lineup System</h1>
+    <p class="subtitle">Sign in to join an event or manage the weekly lineup</p>
+
+    <div class="auth-toggle">
+      <button id="tabLoginBtn" class="active" type="button">Log In</button>
+      <button id="tabRegisterBtn" type="button">Register</button>
+    </div>
+
+    <div id="alertBox"></div>
+
+    <form id="loginForm">
+      <div class="field">
+        <label for="loginUsername">Username or Email</label>
+        <input type="text" id="loginUsername" required autocomplete="username" />
+      </div>
+      <div class="field">
+        <label for="loginPassword">Password</label>
+        <input type="password" id="loginPassword" required autocomplete="current-password" />
+      </div>
+      <button type="submit" class="btn-primary btn-block">Log In</button>
+    </form>
+
+    <form id="registerForm" style="display:none;">
+      <div class="row-2">
+        <div class="field">
+          <label for="regFirstName">First Name</label>
+          <input type="text" id="regFirstName" required />
+        </div>
+        <div class="field">
+          <label for="regLastName">Last Name</label>
+          <input type="text" id="regLastName" required />
+        </div>
+      </div>
+      <div class="field">
+        <label for="regUsername">Username</label>
+        <input type="text" id="regUsername" required />
+      </div>
+      <div class="field">
+        <label for="regEmail">Email</label>
+        <input type="email" id="regEmail" required />
+      </div>
+      <div class="row-2">
+        <div class="field">
+          <label for="regGender">Gender</label>
+          <select id="regGender" required>
+            <option value="" disabled selected>Select</option>
+            <option value="Male">Male</option>
+            <option value="Female">Female</option>
+            <option value="Other">Other</option>
+            <option value="Prefer not to say">Prefer not to say</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="regContact">Contact Number</label>
+          <input type="tel" id="regContact" required />
+        </div>
+      </div>
+      <div class="row-2">
+        <div class="field">
+          <label for="regPassword">Password</label>
+          <input type="password" id="regPassword" required minlength="6" />
+        </div>
+        <div class="field">
+          <label for="regConfirmPassword">Confirm Password</label>
+          <input type="password" id="regConfirmPassword" required minlength="6" />
+        </div>
+      </div>
+      <button type="submit" class="btn-primary btn-block">Create Account</button>
+    </form>
+  </div>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/auth.js"></script>
+</body>
+</html>
