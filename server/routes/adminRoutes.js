@@ -116,7 +116,7 @@ router.get('/marshals', async (req, res) => {
 // GET /api/admin/marshal-list -- every marshal, their rating, and their full event attendance history
 router.get('/marshal-list', async (req, res) => {
   try {
-    const [marshals, attendanceMap] = await Promise.all([Marshal.find().sort({ lastName: 1, firstName: 1 }).lean(), buildAttendanceMap()]);
+    const [marshals, attendanceMap] = await Promise.all([Marshal.find().collation({ locale: 'en', strength: 2 }).sort({ firstName: 1, lastName: 1 }).lean(), buildAttendanceMap()]);
     const enriched = marshals.map((m) => ({
       ...m,
       eventsAttended: attendanceMap[String(m._id)] || [],

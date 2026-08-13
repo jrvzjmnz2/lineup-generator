@@ -41,7 +41,7 @@
         eventsGrid.innerHTML = '<p style="color:#888;">No events are open for sign-up right now. Check back soon.</p>';
       } else {
         events.forEach((ev) => {
-          const label = `${ev.name} — ${formatDate(ev.date)}`;
+          const label = `${ev.name} — ${formatDate(ev.date)} — ${ev.location}`;
           eventsGrid.appendChild(checkItem(`ev_${ev._id}`, 'events', ev._id, label));
         });
       }
@@ -55,10 +55,17 @@
         const eventNames = (submission.events || [])
           .map((id) => (eventsById[id] ? eventsById[id].name : null))
           .filter(Boolean);
-        currentSubmissionBox.innerHTML = `<div class="alert alert-success">
-          You're currently signed up for <strong>${eventNames.join(', ') || 'no active events'}</strong>
-          as <strong>${(submission.roles || []).join(', ')}</strong>. Submitting below will overwrite this.
-        </div>`;
+
+        if (eventNames.length === 0) {
+          currentSubmissionBox.innerHTML = `<div class="alert alert-success">
+            You are not currently signed up for any events. Select one or more below and submit to join.
+          </div>`;
+        } else {
+          currentSubmissionBox.innerHTML = `<div class="alert alert-success">
+            You're currently signed up for <strong>${eventNames.join(', ')}</strong>
+            as <strong>${(submission.roles || []).join(', ')}</strong>. Submitting below will overwrite this.
+          </div>`;
+        }
 
         (submission.events || []).forEach((id) => {
           const box = document.getElementById(`ev_${id}`);
@@ -86,13 +93,22 @@
     const events = Array.from(form.querySelectorAll('input[name="events"]:checked')).map((el) => el.value);
     const roles = Array.from(form.querySelectorAll('input[name="roles"]:checked')).map((el) => el.value);
 
-    if (events.length === 0) return setAlert('Please select at least one event.');
-    if (roles.length === 0) return setAlert('Please select at least one role.');
+    // No event selected is allowed -- it means "take me out of consideration
+    // for everything," so roles aren't required in that case either.
+    if (events.length > 0 && roles.length === 0) return setAlert('Please select at least one role.');
 
     try {
-      await apiRequest('/marshal/submit', { method: 'POST', body: { events, roles } });
-      setAlert('Your submission has been saved. Thank you!', 'success');
-      showToast('Submission saved', 'success');
+      const { removedFrom } = await apiRequest('/marshal/submit', { method: 'POST', body: { events, roles } });
+      if (events.length === 0) {
+        const extra = removedFrom && removedFrom.length
+          ? ` You've also been removed from the lineup for: ${removedFrom.map((r) => r.eventName).join(', ')}.`
+          : '';
+        setAlert(`You've been removed from all events.${extra}`, 'success');
+        showToast('Removed from all events', 'success');
+      } else {
+        setAlert('Your submission has been saved. Thank you!', 'success');
+        showToast('Submission saved', 'success');
+      }
       load();
     } catch (err) {
       setAlert(err.message);
