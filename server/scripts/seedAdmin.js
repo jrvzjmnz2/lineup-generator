@@ -30,6 +30,7 @@ async function main() {
       firstName: 'Admin',
       lastName: 'User',
       passwordHash,
+      authProvider: 'local',
       role: 'admin',
     },
     { upsert: true, new: true, setDefaultsOnInsert: true }

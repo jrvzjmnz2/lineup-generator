@@ -107,9 +107,14 @@ router.get('/events', async (req, res) => {
   res.json({ events: events.map((e) => e.toCard()) });
 });
 
-// GET /api/admin/marshals -- all marshal submissions, used to build the pool on each card
+// GET /api/admin/marshals -- all marshal submissions, used to build the pool on each card.
+// Sorted alphabetically by name (case-insensitive) rather than registration
+// order, matching the Marshal List tab's sort.
 router.get('/marshals', async (req, res) => {
-  const marshals = await Marshal.find().lean();
+  const marshals = await Marshal.find()
+    .collation({ locale: 'en', strength: 2 })
+    .sort({ firstName: 1, lastName: 1 })
+    .lean();
   res.json({ marshals });
 });
 

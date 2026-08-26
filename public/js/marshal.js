@@ -5,6 +5,23 @@
   document.getElementById('welcomeText').textContent = `${user.firstName} ${user.lastName}`;
   document.getElementById('logoutBtn').addEventListener('click', () => Auth.logout());
 
+  // Re-check against the server in case localStorage is stale (e.g. this tab
+  // was open from before the profile was completed) -- Auth.requireRole only
+  // trusted the cached copy.
+  (async () => {
+    try {
+      const { user: fresh } = await apiRequest('/auth/me');
+      if (!fresh.profileComplete) {
+        Auth.setSession(Auth.getToken(), fresh);
+        window.location.href = 'complete-profile.html';
+        return;
+      }
+      Auth.setSession(Auth.getToken(), fresh);
+    } catch (err) {
+      // apiRequest already redirects to index.html on an expired session.
+    }
+  })();
+
   const alertBox = document.getElementById('alertBox');
   const currentSubmissionBox = document.getElementById('currentSubmissionBox');
   const eventsGrid = document.getElementById('eventsCheckboxGrid');

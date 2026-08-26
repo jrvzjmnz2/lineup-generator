@@ -17,7 +17,10 @@ const Auth = {
     this.clear();
     window.location.href = 'index.html';
   },
-  requireRole(role) {
+  // opts.allowIncompleteProfile: true skips the profileComplete redirect --
+  // needed by complete-profile.html itself, since its redirect target IS
+  // that page (redirecting there again would loop forever).
+  requireRole(role, opts = {}) {
     const user = this.getUser();
     if (!user || !this.getToken()) {
       window.location.href = 'index.html';
@@ -25,6 +28,10 @@ const Auth = {
     }
     if (role && user.role !== role) {
       window.location.href = user.role === 'admin' ? 'admin.html' : 'marshal.html';
+      return null;
+    }
+    if (role === 'marshal' && !opts.allowIncompleteProfile && !user.profileComplete) {
+      window.location.href = 'complete-profile.html';
       return null;
     }
     return user;

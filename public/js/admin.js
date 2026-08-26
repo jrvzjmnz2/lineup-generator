@@ -126,6 +126,15 @@
   }
 
   function renderCreateList() {
+    // Rebuilding the grid replaces every pool card's DOM, which would
+    // otherwise snap each one's scroll position back to the top on every
+    // assign/unassign -- capture scrollTop per event first and restore it
+    // after the rebuild below.
+    const poolScrollByEventId = {};
+    createListGrid.querySelectorAll('.pool-card[data-event-id]').forEach((el) => {
+      poolScrollByEventId[el.dataset.eventId] = el.scrollTop;
+    });
+
     createListGrid.innerHTML = '';
     if (allActiveEvents.length === 0) {
       createListGrid.innerHTML = '<div class="empty-state">No active events yet. Add one under "Generate Event".</div>';
@@ -137,6 +146,11 @@
       wrapper.appendChild(buildEventCard(ev, { editable: true }));
       wrapper.appendChild(buildPoolCard(ev));
       createListGrid.appendChild(wrapper);
+    });
+
+    createListGrid.querySelectorAll('.pool-card[data-event-id]').forEach((el) => {
+      const prev = poolScrollByEventId[el.dataset.eventId];
+      if (prev) el.scrollTop = prev;
     });
   }
 
@@ -367,6 +381,10 @@
 
     const poolCard = document.createElement('div');
     poolCard.className = 'pool-card';
+    // .pool-card itself is the scrollable element (overflow-y: auto) -- tag
+    // it with the event id so its scroll position can be preserved across
+    // the full-grid re-renders that assign/unassign trigger.
+    poolCard.dataset.eventId = ev._id;
     poolCard.innerHTML = `<h4>Signed-up Marshals <span class="pool-count-badge">${visible.length}</span></h4>`;
 
     const pool = document.createElement('div');

@@ -6,7 +6,9 @@ const mongoose = require('mongoose');
 const marshalSchema = new mongoose.Schema(
   {
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, unique: true },
-    username: { type: String, required: true },
+    // Marshals sign in with Google now and don't have a username -- kept
+    // optional so old records (and the field itself) still work.
+    username: { type: String },
     firstName: { type: String, required: true },
     lastName: { type: String, required: true },
     email: { type: String, required: true },

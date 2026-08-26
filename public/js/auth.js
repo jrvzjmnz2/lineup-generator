@@ -1,35 +1,36 @@
 (function () {
-  // If already logged in, skip straight to the right dashboard.
+  // If already logged in, skip straight to the right place.
   const existingUser = Auth.getUser();
   if (existingUser && Auth.getToken()) {
-    window.location.href = existingUser.role === 'admin' ? 'admin.html' : 'marshal.html';
+    routeAfterLogin(existingUser);
     return;
   }
 
-  const tabLoginBtn = document.getElementById('tabLoginBtn');
-  const tabRegisterBtn = document.getElementById('tabRegisterBtn');
+  const employeeLoginToggle = document.getElementById('employeeLoginToggle');
   const loginForm = document.getElementById('loginForm');
-  const registerForm = document.getElementById('registerForm');
   const alertBox = document.getElementById('alertBox');
+  const googleUnavailableMsg = document.getElementById('googleUnavailableMsg');
+  const googleSignInButton = document.getElementById('googleSignInButton');
 
   function clearAlert() { alertBox.innerHTML = ''; }
   function setAlert(message, type = 'error') {
     alertBox.innerHTML = `<div class="alert alert-${type}">${message}</div>`;
   }
 
-  tabLoginBtn.addEventListener('click', () => {
-    tabLoginBtn.classList.add('active');
-    tabRegisterBtn.classList.remove('active');
-    loginForm.style.display = '';
-    registerForm.style.display = 'none';
-    clearAlert();
-  });
+  function routeAfterLogin(user) {
+    if (user.role === 'admin') {
+      window.location.href = 'admin.html';
+    } else if (!user.profileComplete) {
+      window.location.href = 'complete-profile.html';
+    } else {
+      window.location.href = 'marshal.html';
+    }
+  }
 
-  tabRegisterBtn.addEventListener('click', () => {
-    tabRegisterBtn.classList.add('active');
-    tabLoginBtn.classList.remove('active');
-    registerForm.style.display = '';
-    loginForm.style.display = 'none';
+  employeeLoginToggle.addEventListener('click', () => {
+    const showing = loginForm.style.display !== 'none';
+    loginForm.style.display = showing ? 'none' : '';
+    employeeLoginToggle.textContent = showing ? 'Employee Login' : 'Hide Employee Login';
     clearAlert();
   });
 
@@ -41,35 +42,66 @@
     try {
       const data = await apiRequest('/auth/login', { method: 'POST', body: { username, password } });
       Auth.setSession(data.token, data.user);
-      window.location.href = data.user.role === 'admin' ? 'admin.html' : 'marshal.html';
+      routeAfterLogin(data.user);
     } catch (err) {
       setAlert(err.message);
     }
   });
 
-  registerForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
+  // Called by Google Identity Services once the user picks an account.
+  window.handleGoogleCredential = async function handleGoogleCredential(response) {
     clearAlert();
-    const payload = {
-      firstName: document.getElementById('regFirstName').value.trim(),
-      lastName: document.getElementById('regLastName').value.trim(),
-      username: document.getElementById('regUsername').value.trim(),
-      email: document.getElementById('regEmail').value.trim(),
-      gender: document.getElementById('regGender').value,
-      contactNumber: document.getElementById('regContact').value.trim(),
-      password: document.getElementById('regPassword').value,
-      confirmPassword: document.getElementById('regConfirmPassword').value,
-    };
-    if (payload.password !== payload.confirmPassword) {
-      setAlert('Password and Confirm Password do not match.');
-      return;
-    }
     try {
-      const data = await apiRequest('/auth/register', { method: 'POST', body: payload });
+      const data = await apiRequest('/auth/google', { method: 'POST', body: { credential: response.credential } });
       Auth.setSession(data.token, data.user);
-      window.location.href = 'marshal.html';
+      routeAfterLogin(data.user);
     } catch (err) {
       setAlert(err.message);
     }
-  });
+  };
+
+  // The Google Identity Services script tag is `async defer`, so it may not
+  // have finished loading yet when this file runs -- poll briefly for it
+  // instead of assuming it's either instantly ready or never coming.
+  function waitForGoogleScript(timeoutMs = 4000) {
+    return new Promise((resolve) => {
+      const start = Date.now();
+      (function poll() {
+        if (typeof google !== 'undefined' && google.accounts && google.accounts.id) {
+          resolve(true);
+        } else if (Date.now() - start > timeoutMs) {
+          resolve(false);
+        } else {
+          setTimeout(poll, 100);
+        }
+      })();
+    });
+  }
+
+  async function initGoogleSignIn() {
+    try {
+      const [{ googleClientId }, googleReady] = await Promise.all([
+        apiRequest('/auth/config'),
+        waitForGoogleScript(),
+      ]);
+      if (!googleClientId || !googleReady) {
+        googleUnavailableMsg.style.display = '';
+        return;
+      }
+      google.accounts.id.initialize({
+        client_id: googleClientId,
+        callback: window.handleGoogleCredential,
+      });
+      google.accounts.id.renderButton(googleSignInButton, {
+        theme: 'outline',
+        size: 'large',
+        text: 'continue_with',
+        width: 280,
+      });
+    } catch (err) {
+      googleUnavailableMsg.style.display = '';
+    }
+  }
+
+  initGoogleSignIn();
 })();
