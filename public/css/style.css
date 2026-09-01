@@ -10,6 +10,7 @@
   --ink: #1c2226;
   --success: #1f7a3d;
   --danger: #a3242f;
+  --gold: #b8860b;
   --radius: 10px;
   --shadow: 0 2px 10px rgba(0,0,0,0.08);
 }
@@ -335,15 +336,20 @@ label {
 
 .marshal-pool { display: flex; flex-wrap: wrap; gap: 6px; }
 .marshal-chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
   background: var(--white);
   border: 1.5px solid var(--slate);
   color: var(--slate);
   border-radius: 20px;
-  padding: 6px 12px;
+  padding: 6px 10px 6px 12px;
   font-size: 12.5px;
   font-weight: 600;
   cursor: grab;
 }
+.marshal-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .marshal-chip:hover { background: var(--slate); color: var(--white); }
 .marshal-chip.disabled {
   cursor: not-allowed;
@@ -353,6 +359,27 @@ label {
   color: #777;
 }
 .marshal-chip.dragging { opacity: 0.4; }
+
+/* Exempt from the one-role-one-event rule for this lineup cycle */
+.marshal-chip.exempt {
+  border-color: var(--gold);
+  border-style: solid;
+  box-shadow: inset 0 0 0 1px var(--gold);
+}
+.exempt-toggle {
+  flex: 0 0 auto;
+  background: transparent;
+  border: none;
+  color: #b8b8b8;
+  font-size: 14px;
+  line-height: 1;
+  padding: 2px;
+  cursor: pointer;
+}
+.marshal-chip.exempt .exempt-toggle { color: var(--gold); }
+.marshal-chip:hover .exempt-toggle { color: var(--gray); }
+.marshal-chip.exempt:hover .exempt-toggle { color: var(--gold); }
+.exempt-toggle:hover { color: var(--gold) !important; }
 
 .logistics-grid {
   display: grid;
@@ -435,6 +462,27 @@ label {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 16px;
+}
+
+.allevents-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.allevents-month-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--slate);
+  text-transform: uppercase;
+}
+#allEventsMonthPicker {
+  border: 1.5px solid var(--gray);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-family: 'Nunito Sans', sans-serif;
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--white);
 }
 
 /* ---------- Marshal List tab ---------- */

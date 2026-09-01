@@ -102,7 +102,11 @@
   <div class="tab-panel" id="panel-allevents">
     <div class="section-title-row">
       <h2>All Events</h2>
-      <button class="btn-outline btn-small" id="refreshAllEvents">Refresh</button>
+      <div class="allevents-controls">
+        <label for="allEventsMonthPicker" class="allevents-month-label">Month</label>
+        <input type="month" id="allEventsMonthPicker" />
+        <button class="btn-outline btn-small" id="refreshAllEvents">Refresh</button>
+      </div>
     </div>
     <div id="allEventsGrid" class="event-grid"></div>
   </div>

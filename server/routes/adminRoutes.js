@@ -1,6 +1,7 @@
 const express = require('express');
 const Event = require('../models/Event');
 const Marshal = require('../models/Marshal');
+const Exemption = require('../models/Exemption');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { ALL_ROLES, ROLES_WITH_EVENT_CAPACITY } = require('../config/roles');
 
@@ -26,6 +27,24 @@ async function findExistingAssignment(marshalId, excludeEventId = null) {
     }
   }
   return null;
+}
+
+// Marshal IDs currently exempt from the single-active-event rule, as a Set
+// of string ids for fast lookup.
+async function getExemptMarshalIdSet() {
+  const exemptions = await Exemption.find().lean();
+  return new Set(exemptions.map((e) => String(e.marshalId)));
+}
+
+// Once no active events remain, the lineup cycle is considered over --
+// clear all exemptions so the next round starts clean and an admin must
+// re-grant them on purpose. Safe to call after any action that might have
+// brought the active-event count to zero (complete, delete).
+async function clearExemptionsIfCycleEnded() {
+  const activeCount = await Event.countDocuments({ status: 'active' });
+  if (activeCount === 0) {
+    await Exemption.deleteMany({});
+  }
 }
 
 function buildDefaultCapacities(roleCounts) {
@@ -100,10 +119,23 @@ router.post('/events', async (req, res) => {
   }
 });
 
-// GET /api/admin/events?status=active|completed
+// GET /api/admin/events?status=active|completed&year=YYYY&month=1-12
+// year/month are optional -- when both are present (used by the All Events
+// tab so it doesn't have to render every completed event ever), only events
+// whose `date` (stored "YYYY-MM-DD", always set via a native <input type=date>
+// so the format is guaranteed) falls in that calendar month are returned.
 router.get('/events', async (req, res) => {
   const status = req.query.status === 'completed' ? 'completed' : 'active';
-  const events = await Event.find({ status }).sort({ date: 1, createdAt: 1 });
+  const query = { status };
+
+  const year = parseInt(req.query.year, 10);
+  const month = parseInt(req.query.month, 10);
+  if (Number.isInteger(year) && Number.isInteger(month) && month >= 1 && month <= 12) {
+    const monthPrefix = `${year}-${String(month).padStart(2, '0')}`;
+    query.date = { $regex: `^${monthPrefix}` };
+  }
+
+  const events = await Event.find(query).sort({ date: 1, createdAt: 1 });
   res.json({ events: events.map((e) => e.toCard()) });
 });
 
@@ -213,10 +245,14 @@ router.post('/events/:id/assign', async (req, res) => {
     const marshal = await Marshal.findById(marshalId).lean();
     if (!marshal) return res.status(404).json({ error: 'Marshal not found' });
 
-    // Global uniqueness: a marshal can only hold one role, in one event, at a time.
-    const existing = await findExistingAssignment(marshalId);
-    if (existing) {
-      return res.status(409).json({ error: `${marshal.firstName} ${marshal.lastName} is already assigned to ${existing.role} on "${existing.eventName}"` });
+    // Global uniqueness: a marshal can only hold one role, in one event, at a
+    // time -- unless they've been manually exempted for this lineup cycle.
+    const exemptIds = await getExemptMarshalIdSet();
+    if (!exemptIds.has(String(marshalId))) {
+      const existing = await findExistingAssignment(marshalId);
+      if (existing) {
+        return res.status(409).json({ error: `${marshal.firstName} ${marshal.lastName} is already assigned to ${existing.role} on "${existing.eventName}"` });
+      }
     }
 
     const capacity = (event.roleCapacities && event.roleCapacities.get(role)) || 0;
@@ -295,6 +331,7 @@ router.post('/events/:id/complete', async (req, res) => {
       { new: true }
     );
     if (!event) return res.status(404).json({ error: 'Event not found' });
+    await clearExemptionsIfCycleEnded();
     res.json({ event: event.toCard() });
   } catch (err) {
     console.error('Complete event error:', err);
@@ -310,6 +347,7 @@ router.delete('/events/:id', async (req, res) => {
     // Deleting the event also deletes its assignments, which immediately frees
     // any marshals that were placed on it -- findExistingAssignment only ever
     // looks at events that still exist and are active.
+    await clearExemptionsIfCycleEnded();
     res.json({ ok: true, id: req.params.id });
   } catch (err) {
     console.error('Delete event error:', err);
@@ -330,6 +368,50 @@ router.post('/events/:id/reopen', async (req, res) => {
   } catch (err) {
     console.error('Reopen event error:', err);
     res.status(500).json({ error: 'Could not reopen event.' });
+  }
+});
+
+// ---------- exemptions (per-lineup-cycle) ----------
+
+// GET /api/admin/exemptions -- marshalIds currently exempt from the
+// single-active-event rule, for this lineup cycle.
+router.get('/exemptions', async (req, res) => {
+  try {
+    const exemptions = await Exemption.find().lean();
+    res.json({ marshalIds: exemptions.map((e) => String(e.marshalId)) });
+  } catch (err) {
+    console.error('List exemptions error:', err);
+    res.status(500).json({ error: 'Could not load exemptions.' });
+  }
+});
+
+// POST /api/admin/exemptions -- manually exempt a marshal for this cycle
+router.post('/exemptions', async (req, res) => {
+  try {
+    const { marshalId } = req.body;
+    const marshal = await Marshal.findById(marshalId).lean();
+    if (!marshal) return res.status(404).json({ error: 'Marshal not found' });
+
+    await Exemption.updateOne(
+      { marshalId },
+      { $setOnInsert: { marshalId } },
+      { upsert: true }
+    );
+    res.status(201).json({ ok: true, marshalId: String(marshalId) });
+  } catch (err) {
+    console.error('Add exemption error:', err);
+    res.status(500).json({ error: 'Could not exempt marshal.' });
+  }
+});
+
+// DELETE /api/admin/exemptions/:marshalId -- revoke an exemption
+router.delete('/exemptions/:marshalId', async (req, res) => {
+  try {
+    await Exemption.deleteOne({ marshalId: req.params.marshalId });
+    res.json({ ok: true, marshalId: req.params.marshalId });
+  } catch (err) {
+    console.error('Remove exemption error:', err);
+    res.status(500).json({ error: 'Could not revoke exemption.' });
   }
 });
 

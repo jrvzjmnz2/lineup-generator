@@ -98,19 +98,45 @@
   let allActiveEvents = [];
   let allMarshals = [];
   let assignedMap = {}; // marshalId -> { eventId, eventName, role }
+  let exemptMarshalIds = new Set(); // marshalIds exempt from the single-active-event rule this cycle
 
   async function loadCreateList() {
     try {
-      const [{ events }, { marshals }] = await Promise.all([
+      const [{ events }, { marshals }, { marshalIds }] = await Promise.all([
         apiRequest('/admin/events?status=active'),
         apiRequest('/admin/marshals'),
+        apiRequest('/admin/exemptions'),
       ]);
       allActiveEvents = events;
       allMarshals = marshals;
+      exemptMarshalIds = new Set(marshalIds);
       buildAssignedMap();
       renderCreateList();
     } catch (err) {
       createListAlertBox.innerHTML = `<div class="alert alert-error">${err.message}</div>`;
+    }
+  }
+
+  async function toggleExemption(marshalId, currentlyExempt) {
+    // Optimistic local update so the chip responds immediately.
+    if (currentlyExempt) exemptMarshalIds.delete(marshalId);
+    else exemptMarshalIds.add(marshalId);
+    renderCreateList();
+
+    try {
+      if (currentlyExempt) {
+        await apiRequest(`/admin/exemptions/${marshalId}`, { method: 'DELETE' });
+        showToast('Exemption removed for this cycle.', 'success');
+      } else {
+        await apiRequest('/admin/exemptions', { method: 'POST', body: { marshalId } });
+        showToast('Marshal exempted -- can now be lined up on multiple events this cycle.', 'success');
+      }
+    } catch (err) {
+      // Revert on failure and let the user know.
+      if (currentlyExempt) exemptMarshalIds.add(marshalId);
+      else exemptMarshalIds.delete(marshalId);
+      renderCreateList();
+      showToast(err.message, 'error');
     }
   }
 
@@ -395,14 +421,38 @@
     } else {
       visible.forEach((m) => {
         const assignedElsewhere = assignedMap[m._id];
-        const chip = document.createElement('div');
-        chip.className = 'marshal-chip' + (assignedElsewhere ? ' disabled' : '');
-        chip.textContent = `${m.firstName} ${m.lastName}`;
-        chip.title = assignedElsewhere
-          ? `Already assigned to ${assignedElsewhere.role} on "${assignedElsewhere.eventName}"`
-          : `Preferred roles: ${(m.roles || []).join(', ')}`;
+        const isExempt = exemptMarshalIds.has(String(m._id));
+        // Exempt marshals skip the "already assigned elsewhere" block entirely.
+        const disabled = assignedElsewhere && !isExempt;
 
-        if (!assignedElsewhere) {
+        const chip = document.createElement('div');
+        chip.className = 'marshal-chip' + (disabled ? ' disabled' : '') + (isExempt ? ' exempt' : '');
+
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'marshal-chip-name';
+        nameSpan.textContent = `${m.firstName} ${m.lastName}`;
+        chip.appendChild(nameSpan);
+
+        const exemptBtn = document.createElement('button');
+        exemptBtn.type = 'button';
+        exemptBtn.className = 'exempt-toggle';
+        exemptBtn.textContent = '★';
+        exemptBtn.title = isExempt
+          ? 'Exempt this cycle -- click to revoke (they will be locked to one event again)'
+          : 'Exempt from the one-event rule for this cycle -- lets them be lined up on multiple events';
+        exemptBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          toggleExemption(m._id, isExempt);
+        });
+        chip.appendChild(exemptBtn);
+
+        if (disabled) {
+          chip.title = `Already assigned to ${assignedElsewhere.role} on "${assignedElsewhere.eventName}"`;
+        } else {
+          chip.title = isExempt
+            ? `Exempt this cycle -- can be lined up on multiple events. Preferred roles: ${(m.roles || []).join(', ')}`
+            : `Preferred roles: ${(m.roles || []).join(', ')}`;
           const bg = ratingColor(m.rating);
           if (bg) {
             chip.style.background = bg;
@@ -526,12 +576,28 @@
   const allEventsGrid = document.getElementById('allEventsGrid');
   document.getElementById('refreshAllEvents').addEventListener('click', loadAllEvents);
 
+  const allEventsMonthPicker = document.getElementById('allEventsMonthPicker');
+  // Default to the current calendar month on first load.
+  allEventsMonthPicker.value = currentMonthValue();
+  allEventsMonthPicker.addEventListener('change', () => {
+    // Falling back to the current month if the user clears the picker keeps
+    // the tab from silently showing every completed event ever.
+    if (!allEventsMonthPicker.value) allEventsMonthPicker.value = currentMonthValue();
+    loadAllEvents();
+  });
+
+  function currentMonthValue() {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  }
+
   async function loadAllEvents() {
     try {
-      const { events } = await apiRequest('/admin/events?status=completed');
+      const [year, month] = allEventsMonthPicker.value.split('-').map((n) => parseInt(n, 10));
+      const { events } = await apiRequest(`/admin/events?status=completed&year=${year}&month=${month}`);
       allEventsGrid.innerHTML = '';
       if (events.length === 0) {
-        allEventsGrid.innerHTML = '<div class="empty-state">No completed events yet.</div>';
+        allEventsGrid.innerHTML = '<div class="empty-state">No completed events in this month.</div>';
         return;
       }
       events.forEach((ev) => allEventsGrid.appendChild(buildEventCard(ev, { editable: false })));
