@@ -102,7 +102,24 @@ router.post('/google', async (req, res) => {
     res.json({ token, user: publicUser(user) });
   } catch (err) {
     console.error('Google sign-in error:', err);
-    res.status(500).json({ error: 'Google sign-in failed. Please try again.' });
+    // Surface enough detail to actually diagnose this from the browser --
+    // this is a small internal tool (admins + marshals only), so exposing
+    // the underlying error is a reasonable tradeoff against a silent generic
+    // 500 that gives the user (and us, without terminal access) nothing to
+    // go on.
+    if (err.code === 11000) {
+      const field = Object.keys(err.keyPattern || err.keyValue || {})[0] || 'a field';
+      return res.status(409).json({
+        error: `Google sign-in failed: a database index conflict on "${field}" blocked creating/linking your account. This usually means an older account already has a null "${field}" and the index needs to be rebuilt as sparse (ask Claude to fix -- see build notes).`,
+      });
+    }
+    if (err.name === 'ValidationError') {
+      return res.status(400).json({ error: `Google sign-in failed: ${err.message}` });
+    }
+    if (err.name === 'MongooseServerSelectionError' || err.name === 'MongoNetworkError' || err.name === 'MongoServerSelectionError') {
+      return res.status(503).json({ error: 'Google sign-in failed: could not reach the database. Please try again in a moment.' });
+    }
+    res.status(500).json({ error: `Google sign-in failed: ${err.message || 'please try again.'}` });
   }
 });
 

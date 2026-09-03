@@ -307,10 +307,10 @@
     const title = document.createElement('div');
     title.className = 'role-title';
     const capacityControls = editable
-      ? `<span class="cap-controls">
-           <button type="button" class="cap-btn" data-cap-action="dec" aria-label="Remove a slot">−</button>
-           <span class="cap-count">${assigned.length}/${capacity}</span>
-           <button type="button" class="cap-btn" data-cap-action="inc" aria-label="Add a slot">+</button>
+      ? `<span style="display:flex;align-items:center;gap:6px;font-weight:600;">
+           <button type="button" class="btn-small" data-cap-action="dec" style="background:var(--slate);color:#fff;">−</button>
+           ${assigned.length}/${capacity}
+           <button type="button" class="btn-small" data-cap-action="inc" style="background:var(--slate);color:#fff;">+</button>
          </span>`
       : `<span>${assigned.length}/${capacity}</span>`;
     title.innerHTML = `<span>${role}</span>${capacityControls}`;
@@ -417,7 +417,7 @@
     pool.className = 'marshal-pool';
 
     if (visible.length === 0) {
-      pool.innerHTML = '<span class="pool-empty">No one signed up for this event yet (or everyone is already placed).</span>';
+      pool.innerHTML = '<span style="color:#888;font-size:12px;">No one signed up for this event yet (or everyone is already placed).</span>';
     } else {
       visible.forEach((m) => {
         const assignedElsewhere = assignedMap[m._id];
@@ -648,10 +648,7 @@
 
       const nameTd = document.createElement('td');
       nameTd.className = 'marshal-name-cell';
-      // Google-authenticated marshals have no username -- show the sign-in
-      // method instead of an "@undefined" line.
-      const nameSub = m.username ? `@${escapeHtml(m.username)}` : 'Google sign-in';
-      nameTd.innerHTML = `<div class="full-name">${escapeHtml(m.firstName)} ${escapeHtml(m.lastName)}</div><div class="sub">${nameSub}</div>`;
+      nameTd.innerHTML = `<div class="full-name">${escapeHtml(m.firstName)} ${escapeHtml(m.lastName)}</div><div class="sub">@${escapeHtml(m.username)}</div>`;
       tr.appendChild(nameTd);
 
       const contactTd = document.createElement('td');
@@ -693,7 +690,7 @@
 
       const swatch = document.createElement('span');
       swatch.className = 'rating-swatch';
-      swatch.style.background = ratingBorderColor(m.rating) || 'rgba(217, 217, 217, 0.62)';
+      swatch.style.background = ratingColor(m.rating) || '#e0e0e0';
 
       const select = document.createElement('select');
       select.innerHTML =
@@ -722,27 +719,25 @@
       });
       const idx = marshalListData.findIndex((m) => m._id === marshalId);
       if (idx >= 0) marshalListData[idx].rating = marshal.rating;
-      if (swatchEl) swatchEl.style.background = ratingBorderColor(marshal.rating) || 'rgba(217, 217, 217, 0.62)';
+      if (swatchEl) swatchEl.style.background = ratingColor(marshal.rating) || '#e0e0e0';
       showToast('Rating updated.', 'success');
     } catch (err) {
       showToast(err.message, 'error');
     }
   }
 
-  // Rating is shown as a monochrome MAROON INTENSITY ramp: 1 = barely tinted,
-  // 10 = deep maroon. The ITEMHOUND palette has no green/amber, so a red-to-green
-  // scale would mean inventing unofficial brand colors -- intensity carries the
-  // same "higher is stronger" reading using only the approved primary.
-  // Returns null (no tint) when unrated.
+  // 1 -> red, 10 -> green. Returns null (no color) when unrated.
   function ratingColor(rating) {
     if (!rating) return null;
-    const t = (Math.min(10, Math.max(1, rating)) - 1) / 9; // 0 -> 1
-    return `rgba(99, 10, 31, ${(0.05 + t * 0.15).toFixed(3)})`;
+    const clamped = Math.min(10, Math.max(1, rating));
+    const hue = ((clamped - 1) / 9) * 120;
+    return `hsl(${hue}, 70%, 82%)`;
   }
   function ratingBorderColor(rating) {
     if (!rating) return null;
-    const t = (Math.min(10, Math.max(1, rating)) - 1) / 9;
-    return `rgba(99, 10, 31, ${(0.28 + t * 0.72).toFixed(3)})`;
+    const clamped = Math.min(10, Math.max(1, rating));
+    const hue = ((clamped - 1) / 9) * 120;
+    return `hsl(${hue}, 55%, 50%)`;
   }
   function getMarshalRating(marshalId) {
     const m = allMarshals.find((mm) => String(mm._id) === String(marshalId));

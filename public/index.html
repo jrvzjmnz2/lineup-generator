@@ -3,40 +3,65 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Marshal Lineup System — Login</title>
+<title>Marshal Lineup System — Sign In</title>
+<link rel="icon" type="image/png" href="img/itemhound-icon.png" />
 <link rel="stylesheet" href="css/style.css" />
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
 <div class="auth-shell">
-  <div class="auth-card">
-    <h1>Marshal Lineup System</h1>
-    <p class="subtitle">Marshals sign in with Google. Employees, use the login below.</p>
 
-    <div id="alertBox"></div>
+  <!-- Solid slate panel as a layout element; the page base stays white. -->
+  <aside class="auth-aside">
+    <img class="auth-logo" src="img/itemhound-logo-white.png" alt="ITEMHOUND" />
 
-    <div id="googleSignInSection">
-      <div id="googleSignInButton" style="display:flex;justify-content:center;margin:18px 0 6px;"></div>
-      <p id="googleUnavailableMsg" style="display:none;color:#8a6d00;background:#fff8e1;border:1px solid #f0dfa0;padding:10px 12px;border-radius:8px;font-size:13.5px;">
-        Google sign-in isn't configured on this server yet.
+    <div class="auth-aside-body">
+      <p class="eyebrow">Marshal Lineup System</p>
+      <div class="auth-rule"></div>
+      <h2>Every role, every event, assembled in one place.</h2>
+      <p>
+        Marshals sign up for the events they're available for. The team builds each
+        lineup from that pool and publishes the final announcement.
       </p>
     </div>
 
-    <div class="employee-login-toggle" style="margin-top:22px;text-align:center;">
-      <button type="button" id="employeeLoginToggle" class="btn-outline btn-small">Employee Login</button>
-    </div>
+    <p class="auth-foot">ITEMHOUND — Internal operations tool</p>
+  </aside>
 
-    <form id="loginForm" style="display:none;margin-top:16px;">
-      <div class="field">
-        <label for="loginUsername">Username or Email</label>
-        <input type="text" id="loginUsername" required autocomplete="username" />
+  <div class="auth-main">
+    <div class="auth-card">
+      <img class="auth-mobile-logo" src="img/itemhound-logo-color.png" alt="ITEMHOUND" />
+
+      <h1>Sign in</h1>
+      <p class="subtitle">Marshals sign in with Google. Employees, use the login below.</p>
+
+      <div id="alertBox"></div>
+
+      <div id="googleSignInSection">
+        <div id="googleSignInButton" class="google-btn-wrap"></div>
+        <p id="googleUnavailableMsg" class="notice" style="display:none;">
+          Google sign-in isn't configured on this server yet.
+        </p>
       </div>
-      <div class="field">
-        <label for="loginPassword">Password</label>
-        <input type="password" id="loginPassword" required autocomplete="current-password" />
+
+      <div class="auth-divider">Employees</div>
+
+      <div class="employee-login-toggle">
+        <button type="button" id="employeeLoginToggle" class="btn-outline btn-block">Employee Login</button>
       </div>
-      <button type="submit" class="btn-primary btn-block">Log In</button>
-    </form>
+
+      <form id="loginForm" style="display:none;margin-top:var(--sp-4);">
+        <div class="field">
+          <label for="loginUsername">Username or Email</label>
+          <input type="text" id="loginUsername" required autocomplete="username" />
+        </div>
+        <div class="field">
+          <label for="loginPassword">Password</label>
+          <input type="password" id="loginPassword" required autocomplete="current-password" />
+        </div>
+        <button type="submit" class="btn-primary btn-block">Log In</button>
+      </form>
+    </div>
   </div>
 </div>
 

@@ -4,33 +4,55 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Marshal Lineup System — Complete Your Profile</title>
+<link rel="icon" type="image/png" href="img/itemhound-icon.png" />
 <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
 <div class="auth-shell">
-  <div class="auth-card">
-    <h1>Almost Done</h1>
-    <p class="subtitle">You're signed in with Google. Just confirm a couple of details before you join events.</p>
 
-    <div id="alertBox"></div>
+  <aside class="auth-aside">
+    <img class="auth-logo" src="img/itemhound-logo-white.png" alt="ITEMHOUND" />
 
-    <form id="profileForm">
-      <div class="row-2">
-        <div class="field">
-          <label for="pFirstName">First Name</label>
-          <input type="text" id="pFirstName" required />
+    <div class="auth-aside-body">
+      <p class="eyebrow">One-time setup</p>
+      <div class="auth-rule"></div>
+      <h2>A few details, then you're set.</h2>
+      <p>
+        We use your name on event lineups and announcements, and your contact number
+        so the team can reach you on event day.
+      </p>
+    </div>
+
+    <p class="auth-foot">ITEMHOUND — Internal operations tool</p>
+  </aside>
+
+  <div class="auth-main">
+    <div class="auth-card">
+      <img class="auth-mobile-logo" src="img/itemhound-logo-color.png" alt="ITEMHOUND" />
+
+      <h1>Almost done</h1>
+      <p class="subtitle">You're signed in with Google. Just confirm a couple of details before you join events.</p>
+
+      <div id="alertBox"></div>
+
+      <form id="profileForm">
+        <div class="row-2">
+          <div class="field">
+            <label for="pFirstName">First Name</label>
+            <input type="text" id="pFirstName" required />
+          </div>
+          <div class="field">
+            <label for="pLastName">Last Name</label>
+            <input type="text" id="pLastName" required />
+          </div>
         </div>
         <div class="field">
-          <label for="pLastName">Last Name</label>
-          <input type="text" id="pLastName" required />
+          <label for="pContact">Contact Number</label>
+          <input type="tel" id="pContact" required />
         </div>
-      </div>
-      <div class="field">
-        <label for="pContact">Contact Number</label>
-        <input type="tel" id="pContact" required />
-      </div>
-      <button type="submit" class="btn-primary btn-block">Continue</button>
-    </form>
+        <button type="submit" class="btn-primary btn-block">Continue</button>
+      </form>
+    </div>
   </div>
 </div>
 

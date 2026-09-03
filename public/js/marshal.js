@@ -55,7 +55,7 @@
 
       eventsGrid.innerHTML = '';
       if (events.length === 0) {
-        eventsGrid.innerHTML = '<p style="color:#888;">No events are open for sign-up right now. Check back soon.</p>';
+        eventsGrid.innerHTML = '<p class="pool-empty">No events are open for sign-up right now. Check back soon.</p>';
       } else {
         events.forEach((ev) => {
           const label = `${ev.name} — ${formatDate(ev.date)} — ${ev.location}`;

@@ -4,43 +4,54 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Marshal Lineup System — Join an Event</title>
+<link rel="icon" type="image/png" href="img/itemhound-icon.png" />
 <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
-<div class="app-header">
-  <h1>Marshal Lineup System</h1>
-  <div class="user-info">
-    <span id="welcomeText"></span>
-    <span class="badge">Marshal</span>
-    <button class="btn-outline btn-small" id="logoutBtn" style="color:white;border-color:white;">Log Out</button>
+
+<header class="topbar">
+  <div class="topbar-brand">
+    <img src="img/itemhound-logo-white.png" alt="ITEMHOUND" />
+    <span class="product">Marshal Lineup System</span>
   </div>
-</div>
+  <div class="user-info">
+    <span class="who" id="welcomeText"></span>
+    <span class="badge">Marshal</span>
+    <button class="btn-invert btn-small" id="logoutBtn">Log Out</button>
+  </div>
+</header>
 
-<div class="container" style="max-width: 720px;">
-  <div class="card-panel">
-    <h2>Sign Up For Events</h2>
-    <p style="color:#666;font-size:13.5px;margin-top:-4px;">
+<div class="container" style="max-width: 780px; padding-top: var(--sp-7); padding-bottom: var(--sp-8);">
+
+  <div class="page-head">
+    <p class="eyebrow">Sign-up</p>
+    <h1>Sign up for events</h1>
+    <p class="lede">
       Select every event you're available for and every role you're willing to fill.
-      Submitting again will replace your previous selection. You can also submit with no
-      events selected if you'd like to be removed from consideration for everything (this
-      also pulls you out of any event you've already been placed on).
+      Submitting again replaces your previous selection. You can also submit with no events
+      selected to be removed from consideration for everything — that also pulls you out of
+      any event you've already been placed on.
     </p>
-    <div class="alert" style="background:#fff8e1;color:#8a6d00;border:1px solid #f0dfa0;">
-      <strong>Please note:</strong> selecting an event is only a preference, not a guaranteed
-      position on that event's lineup. The team assembles the final lineup and may not be able
-      to place everyone who signs up.
-    </div>
+    <div class="page-rule"></div>
+  </div>
 
-    <div id="alertBox"></div>
-    <div id="currentSubmissionBox"></div>
+  <div class="alert alert-notice">
+    <strong>Please note:</strong> selecting an event is a preference, not a guaranteed position
+    on that event's lineup. The team assembles the final lineup and may not be able to place
+    everyone who signs up.
+  </div>
 
+  <div id="alertBox"></div>
+  <div id="currentSubmissionBox"></div>
+
+  <div class="card-panel">
     <form id="marshalForm">
-      <h3 style="margin-top:20px;">Events</h3>
+      <p class="form-section-title">Events</p>
       <div id="eventsCheckboxGrid" class="checkbox-grid">
-        <p style="color:#888;">Loading events…</p>
+        <p class="pool-empty">Loading events…</p>
       </div>
 
-      <h3>Roles</h3>
+      <p class="form-section-title">Roles</p>
       <div id="rolesCheckboxGrid" class="checkbox-grid"></div>
 
       <button type="submit" class="btn-primary btn-block">Submit</button>

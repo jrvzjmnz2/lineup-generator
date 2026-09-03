@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Marshal Lineup System — Complete Your Profile</title>
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<div class="auth-shell">
+  <div class="auth-card">
+    <h1>Almost Done</h1>
+    <p class="subtitle">You're signed in with Google. Just confirm a couple of details before you join events.</p>
+
+    <div id="alertBox"></div>
+
+    <form id="profileForm">
+      <div class="row-2">
+        <div class="field">
+          <label for="pFirstName">First Name</label>
+          <input type="text" id="pFirstName" required />
+        </div>
+        <div class="field">
+          <label for="pLastName">Last Name</label>
+          <input type="text" id="pLastName" required />
+        </div>
+      </div>
+      <div class="field">
+        <label for="pContact">Contact Number</label>
+        <input type="tel" id="pContact" required />
+      </div>
+      <button type="submit" class="btn-primary btn-block">Continue</button>
+    </form>
+  </div>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/complete-profile.js"></script>
+</body>
+</html>

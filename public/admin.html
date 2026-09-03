@@ -4,126 +4,184 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Marshal Lineup System — Admin</title>
+<link rel="icon" type="image/png" href="img/itemhound-icon.png" />
 <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
-<div class="app-header">
-  <h1>Marshal Lineup System</h1>
-  <div class="user-info">
-    <span id="welcomeText"></span>
-    <span class="badge">Admin</span>
-    <button class="btn-outline btn-small" id="logoutBtn" style="color:white;border-color:white;">Log Out</button>
-  </div>
-</div>
+<div class="app">
 
-<div class="container">
-  <div class="tabs">
-    <button class="tab-btn active" data-tab="generate">Generate Event</button>
-    <button class="tab-btn" data-tab="createlist">Create List</button>
-    <button class="tab-btn" data-tab="allevents">All Events</button>
-    <button class="tab-btn" data-tab="marshallist">Marshal List</button>
-  </div>
-
-  <!-- GENERATE EVENT -->
-  <div class="tab-panel active" id="panel-generate">
-    <div class="card-panel" style="width:100%; margin:0 auto;">
-      <h2>Generate Event</h2>
-      <div id="generateAlertBox"></div>
-      <form id="generateForm">
-        <div class="row-2">
-          <div class="field">
-            <label for="genName">Event Name</label>
-            <input type="text" id="genName" required />
-          </div>
-          <div class="field">
-            <label for="genDate">Date</label>
-            <input type="date" id="genDate" required />
-          </div>
-        </div>
-        <div class="field">
-          <label for="genLocation">Location</label>
-          <input type="text" id="genLocation" required />
-        </div>
-        <div class="row-2">
-          <div class="field">
-            <label for="genTeamLeader">Team Leader</label>
-            <input type="text" id="genTeamLeader" placeholder="e.g. Brett / Jordan / Joshua" />
-          </div>
-          <div class="field">
-            <label for="genOffsiteSupport">Offsite Support</label>
-            <input type="text" id="genOffsiteSupport" />
-          </div>
-        </div>
-        <div class="row-2">
-          <div class="field">
-            <label for="genCategories">Categories</label>
-            <input type="text" id="genCategories" placeholder="e.g. 42KM|21KM|10KM|5KM" />
-          </div>
-          <div class="field">
-            <label for="genGunstart">Gun Start <span style="font-weight:400;color:#888;">(optional)</span></label>
-            <input type="text" id="genGunstart" placeholder="e.g. 0100AM|0400AM|0430AM|0500AM" />
-          </div>
-        </div>
-        <div class="row-2">
-          <div class="field">
-            <label for="genCallTime">Call Time</label>
-            <input type="text" id="genCallTime" placeholder="e.g. 8:00 PM (Saturday) 8/08/2026" />
-          </div>
-          <div class="field">
-            <label for="genMaxRunners">Max Runners</label>
-            <input type="text" id="genMaxRunners" placeholder="e.g. 5,640" />
-          </div>
-        </div>
-        <div class="field">
-          <label for="genMeals">Meals</label>
-          <input type="text" id="genMeals" placeholder="e.g. 2 Meals" />
-        </div>
-
-        <h3>Role Slots</h3>
-        <p style="color:#666;font-size:13px;margin-top:-6px;">Set how many marshals are needed for each role at this event.</p>
-        <div id="roleCounterGrid" class="role-counter-grid"></div>
-
-        <button type="submit" class="btn-primary btn-block">Add Event</button>
-      </form>
+  <!-- ============================ SIDEBAR ============================ -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <img src="img/itemhound-logo-white.png" alt="ITEMHOUND" />
+      <p class="product">Marshal Lineup System</p>
     </div>
-  </div>
 
-  <!-- CREATE LIST -->
-  <div class="tab-panel" id="panel-createlist">
-    <div class="section-title-row">
-      <h2>Create List</h2>
-      <button class="btn-outline btn-small" id="refreshCreateList">Refresh</button>
-    </div>
-    <div id="createListAlertBox"></div>
-    <div id="createListGrid" class="event-grid"></div>
-  </div>
+    <nav class="sidebar-nav" aria-label="Sections">
+      <button class="tab-btn active" data-tab="generate">
+        <span class="nav-index">01</span><span>Generate Event</span>
+      </button>
+      <button class="tab-btn" data-tab="createlist">
+        <span class="nav-index">02</span><span>Create List</span>
+      </button>
+      <button class="tab-btn" data-tab="allevents">
+        <span class="nav-index">03</span><span>All Events</span>
+      </button>
+      <button class="tab-btn" data-tab="marshallist">
+        <span class="nav-index">04</span><span>Marshal List</span>
+      </button>
+    </nav>
 
-  <!-- ALL EVENTS -->
-  <div class="tab-panel" id="panel-allevents">
-    <div class="section-title-row">
-      <h2>All Events</h2>
-      <div class="allevents-controls">
-        <label for="allEventsMonthPicker" class="allevents-month-label">Month</label>
-        <input type="month" id="allEventsMonthPicker" />
-        <button class="btn-outline btn-small" id="refreshAllEvents">Refresh</button>
+    <div class="sidebar-foot">
+      <div class="sidebar-user">
+        <span class="who" id="welcomeText"></span>
+        <span class="badge">Admin</span>
       </div>
+      <button class="btn-invert btn-small" id="logoutBtn">Log Out</button>
     </div>
-    <div id="allEventsGrid" class="event-grid"></div>
-  </div>
+  </aside>
 
-  <!-- MARSHAL LIST -->
-  <div class="tab-panel" id="panel-marshallist">
-    <div class="section-title-row">
-      <h2>Marshal List</h2>
-      <button class="btn-outline btn-small" id="refreshMarshalList">Refresh</button>
+  <!-- ============================= MAIN ============================== -->
+  <main class="main">
+    <div class="content">
+
+      <!-- ---------------------- GENERATE EVENT ---------------------- -->
+      <section class="tab-panel active" id="panel-generate">
+        <header class="panel-head">
+          <div class="panel-head-text">
+            <p class="eyebrow">Section 01</p>
+            <h1>Generate Event</h1>
+            <p class="lede">Create an event card and set how many marshals each role needs.</p>
+          </div>
+        </header>
+
+        <div class="card-panel form-panel">
+          <div id="generateAlertBox"></div>
+          <form id="generateForm">
+            <p class="form-section-title">Event Details</p>
+            <div class="row-2">
+              <div class="field">
+                <label for="genName">Event Name</label>
+                <input type="text" id="genName" required />
+              </div>
+              <div class="field">
+                <label for="genDate">Date</label>
+                <input type="date" id="genDate" required />
+              </div>
+            </div>
+            <div class="field">
+              <label for="genLocation">Location</label>
+              <input type="text" id="genLocation" required />
+            </div>
+            <div class="row-2">
+              <div class="field">
+                <label for="genTeamLeader">Team Leader</label>
+                <input type="text" id="genTeamLeader" placeholder="e.g. Brett / Jordan / Joshua" />
+              </div>
+              <div class="field">
+                <label for="genOffsiteSupport">Offsite Support</label>
+                <input type="text" id="genOffsiteSupport" />
+              </div>
+            </div>
+
+            <p class="form-section-title">Race Information</p>
+            <div class="row-2">
+              <div class="field">
+                <label for="genCategories">Categories</label>
+                <input type="text" id="genCategories" placeholder="e.g. 42KM|21KM|10KM|5KM" />
+              </div>
+              <div class="field">
+                <label for="genGunstart">Gun Start — optional</label>
+                <input type="text" id="genGunstart" placeholder="e.g. 0100AM|0400AM|0430AM|0500AM" />
+              </div>
+            </div>
+            <div class="row-2">
+              <div class="field">
+                <label for="genCallTime">Call Time</label>
+                <input type="text" id="genCallTime" placeholder="e.g. 8:00 PM (Saturday) 8/08/2026" />
+              </div>
+              <div class="field">
+                <label for="genMaxRunners">Max Runners</label>
+                <input type="text" id="genMaxRunners" placeholder="e.g. 5,640" />
+              </div>
+            </div>
+            <div class="field">
+              <label for="genMeals">Meals</label>
+              <input type="text" id="genMeals" placeholder="e.g. 2 Meals" />
+            </div>
+
+            <p class="form-section-title">Role Slots</p>
+            <p class="lede" style="margin-bottom: var(--sp-4);">
+              Set how many marshals are needed for each role at this event. You can adjust
+              these counts later from the event card in Create List.
+            </p>
+            <div id="roleCounterGrid" class="role-counter-grid"></div>
+
+            <button type="submit" class="btn-primary btn-block">Add Event</button>
+          </form>
+        </div>
+      </section>
+
+      <!-- ------------------------ CREATE LIST ----------------------- -->
+      <section class="tab-panel" id="panel-createlist">
+        <header class="panel-head">
+          <div class="panel-head-text">
+            <p class="eyebrow">Section 02</p>
+            <h1>Create List</h1>
+            <p class="lede">
+              Drag marshals from each event's pool into a role slot. A marshal holds one role
+              on one active event at a time — unless you star them as exempt for this cycle.
+            </p>
+          </div>
+          <div class="panel-head-actions">
+            <button class="btn-outline btn-small" id="refreshCreateList">Refresh</button>
+          </div>
+        </header>
+        <div id="createListAlertBox"></div>
+        <div id="createListGrid" class="event-grid"></div>
+      </section>
+
+      <!-- ------------------------ ALL EVENTS ------------------------ -->
+      <section class="tab-panel" id="panel-allevents">
+        <header class="panel-head">
+          <div class="panel-head-text">
+            <p class="eyebrow">Section 03</p>
+            <h1>All Events</h1>
+            <p class="lede">Completed events, one calendar month at a time.</p>
+          </div>
+          <div class="panel-head-actions">
+            <div class="allevents-controls">
+              <label for="allEventsMonthPicker" class="allevents-month-label">Month</label>
+              <input type="month" id="allEventsMonthPicker" />
+            </div>
+            <button class="btn-outline btn-small" id="refreshAllEvents">Refresh</button>
+          </div>
+        </header>
+        <div id="allEventsGrid" class="event-grid"></div>
+      </section>
+
+      <!-- ----------------------- MARSHAL LIST ----------------------- -->
+      <section class="tab-panel" id="panel-marshallist">
+        <header class="panel-head">
+          <div class="panel-head-text">
+            <p class="eyebrow">Section 04</p>
+            <h1>Marshal List</h1>
+            <p class="lede">
+              Everyone who has ever submitted the sign-up form, the events they've worked, and a
+              1–10 rating you can set. Rating tints a marshal's name in Create List — the deeper
+              the maroon, the higher the rating.
+            </p>
+          </div>
+          <div class="panel-head-actions">
+            <button class="btn-outline btn-small" id="refreshMarshalList">Refresh</button>
+          </div>
+        </header>
+        <div id="marshalListAlertBox"></div>
+        <div id="marshalListWrap" class="card-panel flush" style="overflow-x:auto;"></div>
+      </section>
+
     </div>
-    <p style="color:#666;font-size:13px;margin-top:-10px;">
-      Every marshal who has ever submitted the sign-up form, every event they've attended, and a 1–10 rating you can set.
-      A marshal's rating colors their name in the Create List tab (green = high, red = low).
-    </p>
-    <div id="marshalListAlertBox"></div>
-    <div id="marshalListWrap" class="card-panel" style="width:100%; margin:0 auto; overflow-x:auto;"></div>
-  </div>
+  </main>
 </div>
 
 <script src="js/api.js"></script>
