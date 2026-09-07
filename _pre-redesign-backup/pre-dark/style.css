@@ -36,41 +36,6 @@
   --wash-slate: rgba(37, 54, 62, 0.04);
 
   --focus-ring: rgba(99, 10, 31, 0.22);
-  --focus-border: var(--maroon);
-
-  /* ---- Semantic surface + role tokens ----------------------------------
-     Light mode values are exactly what the four brand colors resolved to
-     before dark mode existed, so light rendering is unchanged. Dark mode
-     swaps only these (see the [data-theme="dark"] block at the end). */
-  --surface: var(--white);          /* page / main column                */
-  --surface-card: var(--white);     /* panels, event cards, pool cards   */
-  --surface-raised: var(--white);   /* chips, role counters              */
-  --surface-input: var(--white);    /* form fields                       */
-  --surface-frame: var(--slate);    /* sidebar, card heads, toast        */
-  --frame-edge: transparent;        /* sidebar edge rule (dark only)     */
-
-  --accent-line: var(--maroon);     /* the hairline maroon rules         */
-  --accent-strong: var(--maroon);   /* exempt marker, drag target        */
-  --danger-fg: var(--maroon);       /* destructive text/edges            */
-  --danger-border: rgba(99, 10, 31, 0.34);
-
-  --btn-primary-border: var(--maroon);
-  --btn-confirm-bg: var(--slate);
-  --btn-confirm-fg: var(--white);
-  --hover-fill-bg: var(--slate);
-  --hover-fill-fg: var(--white);
-
-  --nav-active-bg: var(--white);
-  --nav-active-fg: var(--slate);
-  --nav-active-index: var(--maroon);
-
-  --pill-active-bg: var(--wash-maroon-strong);
-  --pill-active-fg: var(--maroon);
-
-  --chip-input-bg: rgba(255, 255, 255, 0.7);
-  --exempt-edge: rgba(99, 10, 31, 0.45);
-  --star-idle: rgba(37, 54, 62, 0.28);
-  --link-fg: var(--maroon);
 
   /* ---- Type ---- */
   --font-head: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -114,7 +79,7 @@
 html, body {
   margin: 0;
   padding: 0;
-  background: var(--surface);
+  background: var(--white);
   color: var(--text);
   font-family: var(--font-body);
   font-size: var(--fs-body);
@@ -139,7 +104,7 @@ h3 { font-size: var(--fs-h3); }
 p { margin: 0 0 var(--sp-3); }
 p:last-child { margin-bottom: 0; }
 
-a { color: var(--link-fg); text-decoration: none; }
+a { color: var(--maroon); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
 ::selection { background: var(--wash-maroon-strong); }
@@ -200,16 +165,16 @@ button:disabled, .btn:disabled { opacity: 0.42; cursor: not-allowed; }
 .btn-primary {
   background: var(--maroon);
   color: var(--white);
-  border-color: var(--btn-primary-border);
+  border-color: var(--maroon);
 }
 .btn-primary:hover:not(:disabled) { filter: brightness(0.86); }
 
 /* Confirmations / positive-terminal actions read as slate, not green --
    the brand palette has no green and none is invented here. */
 .btn-success {
-  background: var(--btn-confirm-bg);
-  color: var(--btn-confirm-fg);
-  border-color: var(--btn-confirm-bg);
+  background: var(--slate);
+  color: var(--white);
+  border-color: var(--slate);
 }
 .btn-success:hover:not(:disabled) { filter: brightness(1.22); }
 
@@ -226,22 +191,22 @@ button:disabled, .btn:disabled { opacity: 0.42; cursor: not-allowed; }
   border-color: var(--line-strong);
 }
 .btn-outline:hover:not(:disabled) {
-  background: var(--hover-fill-bg);
-  color: var(--hover-fill-fg);
-  border-color: var(--hover-fill-bg);
+  background: var(--slate);
+  color: var(--white);
+  border-color: var(--slate);
 }
 
 /* Destructive: maroon, but hollow, so it never competes with the primary
    action for attention while still reading as the serious one. */
 .btn-danger {
   background: transparent;
-  color: var(--danger-fg);
-  border-color: var(--danger-border);
+  color: var(--maroon);
+  border-color: rgba(99, 10, 31, 0.34);
 }
 .btn-danger:hover:not(:disabled) {
   background: var(--maroon);
   color: var(--white);
-  border-color: var(--btn-primary-border);
+  border-color: var(--maroon);
 }
 
 .btn-small { padding: 6px 11px; font-size: var(--fs-xs); border-radius: var(--r-sm); }
@@ -267,7 +232,7 @@ input[type="date"], input[type="month"], input[type="number"], select, textarea 
   border: 1px solid var(--line-strong);
   border-radius: var(--r-md);
   width: 100%;
-  background: var(--surface-input);
+  background: var(--white);
   color: var(--text);
   transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
 }
@@ -278,7 +243,7 @@ input:hover:not(:disabled), select:hover, textarea:hover { border-color: rgba(37
 
 input:focus, select:focus, textarea:focus {
   outline: none;
-  border-color: var(--focus-border);
+  border-color: var(--maroon);
   box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
@@ -342,7 +307,7 @@ label {
 .alert-error {
   background: var(--wash-maroon);
   border-color: rgba(99, 10, 31, 0.16);
-  border-left-color: var(--danger-fg);
+  border-left-color: var(--maroon);
   color: var(--text);
 }
 .alert-success {
@@ -362,8 +327,7 @@ label {
   position: fixed;
   bottom: var(--sp-5);
   right: var(--sp-5);
-  background: var(--surface-frame);
-  border: 1px solid var(--line-on-dark);
+  background: var(--slate);
   color: var(--text-on-dark);
   padding: 13px 18px;
   border-radius: var(--r-md);
@@ -373,8 +337,8 @@ label {
   max-width: 360px;
   animation: toast-in 220ms var(--ease);
 }
-.toast.error { background: var(--maroon); border-color: var(--btn-primary-border); }
-.toast.success { background: var(--surface-frame); }
+.toast.error { background: var(--maroon); }
+.toast.success { background: var(--slate); }
 
 @keyframes toast-in {
   from { opacity: 0; transform: translateY(8px); }
@@ -395,8 +359,7 @@ label {
 
 /* ---- Sidebar: the one solid slate structural panel ---- */
 .sidebar {
-  background: var(--surface-frame);
-  border-right: 1px solid var(--frame-edge);
+  background: var(--slate);
   color: var(--text-on-dark);
   display: flex;
   flex-direction: column;
@@ -465,12 +428,12 @@ label {
   color: var(--text-on-dark);
 }
 .sidebar-nav .tab-btn.active {
-  background: var(--nav-active-bg);
-  color: var(--nav-active-fg);
+  background: var(--white);
+  color: var(--slate);
   font-weight: 600;
-  border-color: var(--nav-active-bg);
+  border-color: var(--white);
 }
-.sidebar-nav .tab-btn.active .nav-index { color: var(--nav-active-index); }
+.sidebar-nav .tab-btn.active .nav-index { color: var(--maroon); }
 
 .sidebar-foot {
   padding-top: var(--sp-4);
@@ -494,7 +457,7 @@ label {
 }
 
 /* ---- Main column ---- */
-.main { min-width: 0; background: var(--surface); }
+.main { min-width: 0; background: var(--white); }
 
 .content {
   padding: var(--sp-7) var(--sp-7) var(--sp-8);
@@ -528,7 +491,7 @@ label {
   bottom: -1px;
   width: 52px;
   height: 2px;
-  background: var(--accent-line);
+  background: var(--maroon);
 }
 .panel-head h1 {
   font-size: var(--fs-display);
@@ -712,7 +675,7 @@ label {
 /* ==========================  PANELS & CARDS  =========================== */
 
 .card-panel {
-  background: var(--surface-card);
+  background: var(--white);
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
   padding: var(--sp-6);
@@ -750,7 +713,7 @@ label {
   align-items: center;
   justify-content: space-between;
   gap: var(--sp-3);
-  background: var(--surface-raised);
+  background: var(--white);
   transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease);
 }
 .role-counter:hover { border-color: var(--line-strong); background: var(--wash-slate); }
@@ -775,9 +738,9 @@ label {
   place-items: center;
 }
 .role-counter .counter-controls button:hover {
-  background: var(--hover-fill-bg);
-  border-color: var(--hover-fill-bg);
-  color: var(--hover-fill-fg);
+  background: var(--slate);
+  border-color: var(--slate);
+  color: var(--white);
 }
 .role-counter .counter-value {
   min-width: 22px;
@@ -837,7 +800,7 @@ label {
 .event-card-wrapper .event-card { flex: 1 1 auto; min-width: 0; }
 
 .event-card {
-  background: var(--surface-card);
+  background: var(--white);
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
   box-shadow: var(--shadow-sm);
@@ -849,7 +812,7 @@ label {
 .event-card:hover { box-shadow: var(--shadow-md); }
 
 .event-card .card-head {
-  background: var(--surface-frame);
+  background: var(--slate);
   color: var(--text-on-dark);
   padding: var(--sp-4) var(--sp-5);
 }
@@ -898,8 +861,8 @@ label {
   border-color: transparent;
   background: transparent;
 }
-.detail-row input:hover { border-color: var(--line-strong); background: var(--surface-input); }
-.detail-row input:focus { border-color: var(--focus-border); background: var(--surface-input); }
+.detail-row input:hover { border-color: var(--line-strong); background: var(--white); }
+.detail-row input:focus { border-color: var(--maroon); background: var(--white); }
 
 /* ---- Role blocks / drop slots ---- */
 .role-block { margin-bottom: var(--sp-4); }
@@ -929,7 +892,7 @@ label {
   transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease);
 }
 .role-slot.dragover {
-  border-color: var(--accent-strong);
+  border-color: var(--maroon);
   border-style: solid;
   background: var(--wash-maroon);
 }
@@ -948,13 +911,13 @@ label {
 }
 .assigned-chip input {
   border-color: transparent;
-  background: var(--chip-input-bg);
+  background: rgba(255, 255, 255, 0.7);
 }
-.assigned-chip input:focus { background: var(--surface-input); }
+.assigned-chip input:focus { background: var(--white); }
 .assigned-chip .remove-btn {
   background: transparent;
   border: 0;
-  color: var(--danger-fg);
+  color: var(--maroon);
   padding: 0 3px;
   font-size: 16px;
   font-weight: 700;
@@ -1001,7 +964,7 @@ label {
   align-self: flex-start;
   position: sticky;
   top: var(--sp-4);
-  background: var(--surface-card);
+  background: var(--white);
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
   box-shadow: var(--shadow-sm);
@@ -1042,7 +1005,7 @@ label {
   align-items: center;
   justify-content: space-between;
   gap: 6px;
-  background: var(--surface-raised);
+  background: var(--white);
   border: 1px solid var(--line-strong);
   color: var(--text);
   border-radius: var(--r-md);
@@ -1054,7 +1017,7 @@ label {
               box-shadow var(--dur) var(--ease), transform var(--dur) var(--ease);
 }
 .marshal-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.marshal-chip:hover { border-color: var(--hover-fill-bg); box-shadow: var(--shadow-sm); }
+.marshal-chip:hover { border-color: var(--slate); box-shadow: var(--shadow-sm); }
 .marshal-chip:active { cursor: grabbing; }
 .marshal-chip.disabled {
   cursor: not-allowed;
@@ -1069,15 +1032,15 @@ label {
 /* Exempt from the one-role-one-event rule for this lineup cycle: marked with
    a maroon edge + filled star rather than a non-brand accent color. */
 .marshal-chip.exempt {
-  border-color: var(--exempt-edge);
-  box-shadow: inset 3px 0 0 var(--accent-strong);
+  border-color: rgba(99, 10, 31, 0.45);
+  box-shadow: inset 3px 0 0 var(--maroon);
   padding-left: 13px;
 }
 .exempt-toggle {
   flex: 0 0 auto;
   background: transparent;
   border: 0;
-  color: var(--star-idle);
+  color: rgba(37, 54, 62, 0.28);
   font-size: 13px;
   line-height: 1;
   padding: 2px;
@@ -1085,8 +1048,8 @@ label {
   border-radius: var(--r-sm);
   transition: color var(--dur) var(--ease);
 }
-.exempt-toggle:hover { color: var(--accent-strong); }
-.marshal-chip.exempt .exempt-toggle { color: var(--accent-strong); }
+.exempt-toggle:hover { color: var(--maroon); }
+.marshal-chip.exempt .exempt-toggle { color: var(--maroon); }
 
 /* ==========================  MARSHAL LIST TABLE  ======================= */
 
@@ -1158,7 +1121,7 @@ label {
   margin-left: 6px;
   vertical-align: 1px;
 }
-.status-pill.active { background: var(--pill-active-bg); color: var(--pill-active-fg); }
+.status-pill.active { background: var(--wash-maroon-strong); color: var(--maroon); }
 .status-pill.completed { background: var(--wash-gray-strong); color: var(--text-muted); }
 .no-attendance { color: var(--text-faint); font-size: var(--fs-xs); font-style: italic; }
 
@@ -1282,194 +1245,4 @@ label {
   display: grid;
   place-items: center;
 }
-.cap-btn:hover { background: var(--hover-fill-bg); border-color: var(--hover-fill-bg); color: var(--hover-fill-fg); }
-
-/* ==========================  THEME TOGGLE  ============================= */
-
-.theme-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-2);
-  width: 100%;
-  padding: 8px 10px;
-  border-radius: var(--r-md);
-  background: transparent;
-  border: 1px solid var(--line-on-dark);
-  color: var(--text-on-dark-muted);
-  font-size: var(--fs-xs);
-  font-weight: 600;
-}
-.theme-toggle:hover {
-  background: rgba(255, 255, 255, 0.09);
-  color: var(--text-on-dark);
-  border-color: rgba(255, 255, 255, 0.26);
-}
-.theme-toggle .theme-toggle-label {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-}
-.theme-toggle .theme-icon { font-size: 13px; line-height: 1; }
-/* Tiny track/knob so the control reads as a switch, not a button. */
-.theme-toggle .theme-track {
-  flex: 0 0 auto;
-  width: 26px;
-  height: 14px;
-  border-radius: 100px;
-  background: rgba(255, 255, 255, 0.16);
-  position: relative;
-  transition: background var(--dur) var(--ease);
-}
-.theme-toggle .theme-track::after {
-  content: '';
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--white);
-  transition: transform var(--dur) var(--ease);
-}
-:root[data-theme="dark"] .theme-toggle .theme-track { background: rgba(255, 255, 255, 0.3); }
-:root[data-theme="dark"] .theme-toggle .theme-track::after { transform: translateX(12px); }
-
-/* ==========================  DARK THEME  ==============================
-   Scope: the ADMIN CONSOLE ONLY. js/theme.js stamps data-theme on <html>
-   on admin.html and nowhere else, so sign-in, complete-profile and the
-   marshal sign-up page always render light.
-
-   BRAND NOTE: the ITEMHOUND guidelines name plain white as the only
-   approved background treatment, so a dark surface is a deliberate,
-   user-approved departure. It is held as close to the guidelines as
-   possible -- every value below is one of the four approved colors, or a
-   documented mix of two of them. No new hue is introduced. Dark slate
-   stays the darkest surface and elevation is made by mixing white into
-   it, the same way the light theme builds its washes.
-
-   Contrast was checked numerically rather than by eye: body text lands
-   between 7.2:1 and 10.9:1, muted text 4.8:1+, faint text 4.5:1+.
-   ====================================================================== */
-
-:root[data-theme="dark"] {
-  color-scheme: dark; /* native selects, date/month pickers and scrollbars */
-
-  /* Flat fallbacks first -- browsers without color-mix() get a single-tone
-     slate dark mode, which is still fully legible because structure comes
-     from the border tokens. The @supports block below layers it properly. */
-  --surface: var(--slate);
-  --surface-card: var(--slate);
-  --surface-raised: var(--slate);
-  --surface-input: var(--slate);
-  --surface-frame: var(--slate);
-  --frame-edge: rgba(255, 255, 255, 0.1);
-
-  --text: rgba(255, 255, 255, 0.92);
-  --text-muted: rgba(255, 255, 255, 0.68);
-  --text-faint: rgba(255, 255, 255, 0.65); /* 0.5 fails AA on raised surfaces */
-
-  --line: rgba(255, 255, 255, 0.1);
-  --line-strong: rgba(255, 255, 255, 0.2);
-
-  --wash-gray: rgba(255, 255, 255, 0.05);
-  --wash-gray-strong: rgba(255, 255, 255, 0.12);
-  /* Maroon washes are invisible on a dark ground (1.4:1), so the states
-     they carried -- row hover, drag target, active pill -- switch to white. */
-  --wash-maroon: rgba(255, 255, 255, 0.08);
-  --wash-maroon-strong: rgba(255, 255, 255, 0.14);
-  --wash-slate: rgba(255, 255, 255, 0.04);
-
-  --focus-ring: rgba(255, 255, 255, 0.24);
-  --focus-border: rgba(255, 255, 255, 0.5); /* 3.7:1 against a card */
-
-  /* Maroon keeps its role as the primary fill (white on maroon is 13.2:1),
-     but its EDGE is only ~1.4:1 against these surfaces, so filled maroon
-     controls take a light gray border measured at 3.7:1+ to stay visible. */
-  --btn-primary-border: rgba(217, 217, 217, 0.7);
-
-  /* A slate fill on a slate surface would vanish, so the confirm action
-     switches to the light gray fill (6.7:1) with slate text (8.9:1). */
-  --btn-confirm-bg: var(--gray);
-  --btn-confirm-fg: var(--slate);
-
-  --hover-fill-bg: rgba(255, 255, 255, 0.16);
-  --hover-fill-fg: var(--white);
-
-  --accent-line: var(--gray);
-  --accent-strong: var(--gray);
-
-  /* Destructive actions cannot be signalled by hue here -- maroon reads as
-     black against slate. They stay hollow and neutral at rest and fill
-     maroon on hover, and every one of them is still behind a confirm(). */
-  --danger-fg: rgba(255, 255, 255, 0.75);
-  --danger-border: rgba(255, 255, 255, 0.28);
-
-  --nav-active-bg: rgba(255, 255, 255, 0.14);
-  --nav-active-fg: var(--white);
-  --nav-active-index: var(--gray);
-
-  --pill-active-bg: rgba(255, 255, 255, 0.16);
-  --pill-active-fg: var(--white);
-
-  --chip-input-bg: rgba(255, 255, 255, 0.1);
-  --exempt-edge: rgba(217, 217, 217, 0.5);
-  --star-idle: rgba(255, 255, 255, 0.34);
-  --link-fg: var(--gray);
-
-  /* Slate-tinted shadows are invisible on a dark ground; depth comes from a
-     near-black scrim, which is a rendering effect rather than a fill color. */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.28);
-  --shadow-md: 0 1px 2px rgba(0, 0, 0, 0.3), 0 10px 28px -18px rgba(0, 0, 0, 0.7);
-  --shadow-lg: 0 2px 4px rgba(0, 0, 0, 0.35), 0 24px 48px -24px rgba(0, 0, 0, 0.8);
-}
-
-/* The real surface ladder: dark slate with white mixed in, 0% -> 14%.
-   frame #25363E < input 4% < surface 5% < card 9% < raised 14%. */
-@supports (color: color-mix(in srgb, #FFFFFF 5%, #25363E)) {
-  :root[data-theme="dark"] {
-    --surface: color-mix(in srgb, var(--white) 5%, var(--slate));
-    --surface-card: color-mix(in srgb, var(--white) 9%, var(--slate));
-    --surface-raised: color-mix(in srgb, var(--white) 14%, var(--slate));
-    --surface-input: color-mix(in srgb, var(--white) 4%, var(--slate));
-  }
-}
-
-/* The white ITEMHOUND logo already sits on the slate sidebar in both
-   themes, so no logo swap is needed on this page. */
-
-/* Dashed borders read heavier on dark; soften the empty drop slots. */
-:root[data-theme="dark"] .role-slot { border-color: rgba(255, 255, 255, 0.16); }
-:root[data-theme="dark"] .empty-state { border-color: rgba(255, 255, 255, 0.16); }
-
-/* The card head is pure slate against a lighter card, which is only a 1.13:1
-   step -- crisp the band with a rule so it still reads as a header. */
-:root[data-theme="dark"] .event-card .card-head {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
-}
-
-/* Maroon blocks keep their identity on dark, but their edge is ~1.05:1
-   against slate, so small maroon fills take a light ring. Without this the
-   ACTIVE pill and the COMPLETED pill become indistinguishable neutrals. */
-:root[data-theme="dark"] .status-pill.active {
-  background: var(--maroon);
-  color: var(--white);
-  box-shadow: inset 0 0 0 1px rgba(217, 217, 217, 0.55);
-}
-:root[data-theme="dark"] .badge {
-  box-shadow: inset 0 0 0 1px rgba(217, 217, 217, 0.5);
-}
-
-/* Narrow layout: the sidebar footer becomes a row, so the toggle must size to
-   its content instead of filling the track -- otherwise it shrink-wraps the
-   Log Out button onto two lines. Declared here, after the base .theme-toggle
-   rule, so it actually wins the cascade. */
-@media (max-width: 960px) {
-  .theme-toggle {
-    width: auto;
-    flex: 0 0 auto;
-    gap: var(--sp-3);
-  }
-  .sidebar-foot > button { white-space: nowrap; }
-  .sidebar-user { flex-wrap: nowrap; }
-}
+.cap-btn:hover { background: var(--slate); border-color: var(--slate); color: var(--white); }

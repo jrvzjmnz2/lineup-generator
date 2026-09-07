@@ -6,20 +6,6 @@
 <title>Marshal Lineup System — Admin</title>
 <link rel="icon" type="image/png" href="img/itemhound-icon.png" />
 <link rel="stylesheet" href="css/style.css" />
-<script>
-  // Stamp the theme before first paint so the page never flashes light.
-  // Full logic lives in js/theme.js; this only has to resolve the value.
-  (function () {
-    try {
-      var stored = localStorage.getItem('lineup_theme');
-      var osDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-      document.documentElement.dataset.theme =
-        (stored === 'light' || stored === 'dark') ? stored : (osDark ? 'dark' : 'light');
-    } catch (err) {
-      document.documentElement.dataset.theme = 'light';
-    }
-  })();
-</script>
 </head>
 <body>
 <div class="app">
@@ -51,13 +37,6 @@
         <span class="who" id="welcomeText"></span>
         <span class="badge">Admin</span>
       </div>
-      <button class="theme-toggle" type="button" id="themeToggle" aria-pressed="false">
-        <span class="theme-toggle-label">
-          <span class="theme-icon" aria-hidden="true">☀</span>
-          <span class="theme-name">Light</span>
-        </span>
-        <span class="theme-track" aria-hidden="true"></span>
-      </button>
       <button class="btn-invert btn-small" id="logoutBtn">Log Out</button>
     </div>
   </aside>
@@ -189,8 +168,8 @@
             <h1>Marshal List</h1>
             <p class="lede">
               Everyone who has ever submitted the sign-up form, the events they've worked, and a
-              1–10 rating you can set. Rating tints a marshal's name in Create List — the
-              stronger the tint, the higher the rating.
+              1–10 rating you can set. Rating tints a marshal's name in Create List — the deeper
+              the maroon, the higher the rating.
             </p>
           </div>
           <div class="panel-head-actions">
@@ -206,7 +185,6 @@
 </div>
 
 <script src="js/api.js"></script>
-<script src="js/theme.js"></script>
 <script src="js/admin.js"></script>
 </body>
 </html>

@@ -693,7 +693,7 @@
 
       const swatch = document.createElement('span');
       swatch.className = 'rating-swatch';
-      swatch.style.background = ratingBorderColor(m.rating) || unratedSwatch();
+      swatch.style.background = ratingBorderColor(m.rating) || 'rgba(217, 217, 217, 0.62)';
 
       const select = document.createElement('select');
       select.innerHTML =
@@ -722,48 +722,27 @@
       });
       const idx = marshalListData.findIndex((m) => m._id === marshalId);
       if (idx >= 0) marshalListData[idx].rating = marshal.rating;
-      if (swatchEl) swatchEl.style.background = ratingBorderColor(marshal.rating) || unratedSwatch();
+      if (swatchEl) swatchEl.style.background = ratingBorderColor(marshal.rating) || 'rgba(217, 217, 217, 0.62)';
       showToast('Rating updated.', 'success');
     } catch (err) {
       showToast(err.message, 'error');
     }
   }
 
-  // Rating is shown as a monochrome INTENSITY ramp: faint at 1, full strength
-  // at 10. The ITEMHOUND palette has no green/amber, so a red-to-green scale
-  // would mean inventing unofficial brand colors -- intensity carries the same
-  // "higher is stronger" reading using only approved colors.
-  //
-  // The ramp has to flip with the theme: maroon on dark slate is roughly
-  // 1.4:1, i.e. invisible, so in dark mode the ramp runs on white instead.
-  // Either way the metaphor holds -- more intense means higher rated.
+  // Rating is shown as a monochrome MAROON INTENSITY ramp: 1 = barely tinted,
+  // 10 = deep maroon. The ITEMHOUND palette has no green/amber, so a red-to-green
+  // scale would mean inventing unofficial brand colors -- intensity carries the
+  // same "higher is stronger" reading using only the approved primary.
   // Returns null (no tint) when unrated.
-  function unratedSwatch() {
-    // Kept below the rating-1 value (0.18) so "unrated" never reads as rated.
-    return isDarkTheme() ? 'rgba(255, 255, 255, 0.10)' : 'rgba(217, 217, 217, 0.62)';
-  }
-  function isDarkTheme() {
-    return document.documentElement.dataset.theme === 'dark';
-  }
-  function ratingRamp(rating) {
-    const t = (Math.min(10, Math.max(1, rating)) - 1) / 9; // 0 -> 1
-    // The dark edge ramp runs 0.18 -> 1.0: measured against CIE L*, a linear
-    // ramp spaces more evenly than any gamma curve tried (evenness 0.87 vs
-    // 0.47 at t^1.3), and this range yields ~19% more total lightness travel
-    // than starting at 0.30, so 8 vs 9 vs 10 stay tellable apart.
-    return isDarkTheme()
-      ? { rgb: '255, 255, 255', tint: 0.05 + t * 0.16, edge: 0.18 + t * 0.82 }
-      : { rgb: '99, 10, 31', tint: 0.05 + t * 0.15, edge: 0.28 + t * 0.72 };
-  }
   function ratingColor(rating) {
     if (!rating) return null;
-    const r = ratingRamp(rating);
-    return `rgba(${r.rgb}, ${r.tint.toFixed(3)})`;
+    const t = (Math.min(10, Math.max(1, rating)) - 1) / 9; // 0 -> 1
+    return `rgba(99, 10, 31, ${(0.05 + t * 0.15).toFixed(3)})`;
   }
   function ratingBorderColor(rating) {
     if (!rating) return null;
-    const r = ratingRamp(rating);
-    return `rgba(${r.rgb}, ${r.edge.toFixed(3)})`;
+    const t = (Math.min(10, Math.max(1, rating)) - 1) / 9;
+    return `rgba(99, 10, 31, ${(0.28 + t * 0.72).toFixed(3)})`;
   }
   function getMarshalRating(marshalId) {
     const m = allMarshals.find((mm) => String(mm._id) === String(marshalId));
@@ -840,13 +819,6 @@
     if (isNaN(date.getTime())) return d;
     return date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' });
   }
-
-  // Re-tint on a theme flip: the rating ramp is baked into inline styles at
-  // render time, so whatever is currently on screen has to be redrawn.
-  window.addEventListener('lineup:themechange', () => {
-    if (allActiveEvents.length) renderCreateList();
-    if (marshalListData.length) renderMarshalList();
-  });
 
   // Initial load
   loadCreateList();
