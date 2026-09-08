@@ -51,6 +51,30 @@
     roleCounterGrid.appendChild(div);
   });
 
+  // Tell the admin which rule the event they are creating will fall under,
+  // as soon as they pick a date.
+  const genDateInput = document.getElementById('genDate');
+  const genDateHint = document.getElementById('genDateHint');
+  if (genDateInput && genDateHint) {
+    const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const paintDateHint = () => {
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(genDateInput.value || '');
+      if (!m) { genDateHint.textContent = ''; genDateHint.className = 'field-hint'; return; }
+      // Built from the parts via Date.UTC for the same reason the server does:
+      // parsing the string directly would shift the day in a non-UTC zone.
+      const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+      const day = d.getUTCDay();
+      const weekend = day === 0 || day === 6;
+      genDateHint.textContent = weekend
+        ? `${DAY_NAMES[day]} — weekend event: each marshal can hold only one weekend event.`
+        : `${DAY_NAMES[day]} — weekday event: marshals can be lined up on several of these.`;
+      genDateHint.className = 'field-hint' + (weekend ? ' field-hint-weekend' : '');
+    };
+    genDateInput.addEventListener('change', paintDateHint);
+    genDateInput.addEventListener('input', paintDateHint);
+    paintDateHint();
+  }
+
   roleCounterGrid.addEventListener('click', (e) => {
     const btn = e.target.closest('button[data-action]');
     if (!btn) return;
@@ -99,7 +123,10 @@
 
   let allActiveEvents = [];
   let allMarshals = [];
-  let assignedMap = {}; // marshalId -> { eventId, eventName, role }
+  // marshalId -> { eventId, eventName, role, dayName } for active WEEKEND
+  // events only. Weekday events are unrestricted, so being on one never
+  // disables a marshal anywhere.
+  let assignedMap = {};
   let exemptMarshalIds = new Set(); // marshalIds exempt from the single-active-event rule this cycle
 
   async function loadCreateList() {
@@ -145,9 +172,15 @@
   function buildAssignedMap() {
     assignedMap = {};
     allActiveEvents.forEach((ev) => {
+      if (!ev.isWeekend) return; // weekday placements never restrict anything
       ALL_ROLES.forEach((role) => {
         (ev.assignments[role] || []).forEach((a) => {
-          assignedMap[a.marshalId] = { eventId: ev._id, eventName: ev.name, role };
+          assignedMap[a.marshalId] = {
+            eventId: ev._id,
+            eventName: ev.name,
+            role,
+            dayName: ev.dayName || '',
+          };
         });
       });
     });
@@ -189,7 +222,19 @@
 
     const head = document.createElement('div');
     head.className = 'card-head';
-    head.innerHTML = `<h3>${escapeHtml(ev.name)}</h3><div class="meta">${formatDate(ev.date)} &nbsp;•&nbsp; ${escapeHtml(ev.location)}</div>`;
+    // The schedule tag tells the admin at a glance which rule this card is
+    // under: weekend cards allow one event per marshal, weekday cards do not
+    // restrict at all.
+    const tagClass = ev.isWeekend ? 'schedule-tag weekend' : 'schedule-tag weekday';
+    const tagText = ev.isWeekend ? 'Weekend' : 'Weekday';
+    const tagTitle = ev.isWeekend
+      ? 'Weekend event — a marshal can only hold one weekend event at a time'
+      : 'Weekday event — marshals can be lined up on as many as you need';
+    const dayLabel = ev.dayName ? `${escapeHtml(ev.dayName)}, ` : '';
+    head.innerHTML =
+      `<div class="card-head-top"><h3>${escapeHtml(ev.name)}</h3>` +
+      `<span class="${tagClass}" title="${tagTitle}">${tagText}</span></div>` +
+      `<div class="meta">${dayLabel}${formatDate(ev.date)} &nbsp;•&nbsp; ${escapeHtml(ev.location)}</div>`;
     card.appendChild(head);
 
     const body = document.createElement('div');
@@ -429,7 +474,8 @@
       pool.innerHTML = '<span class="pool-empty">No one signed up for this event yet (or everyone is already placed).</span>';
     } else {
       visible.forEach((m) => {
-        const assignedElsewhere = assignedMap[m._id];
+        // The weekend block only applies when THIS card is a weekend event.
+        const assignedElsewhere = ev.isWeekend ? assignedMap[m._id] : null;
         const isExempt = exemptMarshalIds.has(String(m._id));
         // Exempt marshals skip the "already assigned elsewhere" block entirely.
         const disabled = assignedElsewhere && !isExempt;
@@ -457,7 +503,8 @@
         chip.appendChild(exemptBtn);
 
         if (disabled) {
-          chip.title = `Already assigned to ${assignedElsewhere.role} on "${assignedElsewhere.eventName}"`;
+          const when = assignedElsewhere.dayName ? ` (${assignedElsewhere.dayName})` : '';
+          chip.title = `Already on ${assignedElsewhere.role} for "${assignedElsewhere.eventName}"${when}. Weekend events allow one event per marshal.`;
         } else {
           chip.title = isExempt
             ? `Exempt this cycle -- can be lined up on multiple events. Preferred roles: ${(m.roles || []).join(', ')}`

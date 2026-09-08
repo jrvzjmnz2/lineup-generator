@@ -1526,3 +1526,45 @@ label {
 }
 .inapp-notice-actions .btn:hover { text-decoration: none; }
 .inapp-notice-actions button { min-width: 104px; }
+
+/* ==========================  SCHEDULE TAG  ============================
+   Marks an event card as weekend (one event per marshal) or weekday
+   (unrestricted). Maroon for the restricted case so it reads as the one
+   with a rule attached; a quiet outline for the unrestricted one. */
+
+.card-head-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin-bottom: 3px;
+}
+.card-head-top h3 { margin-bottom: 0; }
+
+.schedule-tag {
+  flex: 0 0 auto;
+  font-family: var(--font-head);
+  font-size: var(--fs-eyebrow);
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  border-radius: 100px;
+  padding: 2px 9px;
+  white-space: nowrap;
+  margin-top: 2px;
+}
+/* Both sit on the dark slate card head, so the maroon fill takes a light ring
+   for its edge (maroon on slate is ~1.05:1 on its own). */
+.schedule-tag.weekend {
+  background: var(--maroon);
+  color: var(--white);
+  box-shadow: inset 0 0 0 1px rgba(217, 217, 217, 0.55);
+}
+.schedule-tag.weekday {
+  background: transparent;
+  color: var(--text-on-dark-muted);
+  box-shadow: inset 0 0 0 1px var(--line-on-dark);
+}
+
+/* The weekend variant of the Generate Event date hint. */
+.field-hint-weekend { color: var(--text); font-weight: 600; }

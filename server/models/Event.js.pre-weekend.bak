@@ -1,6 +1,5 @@
 const mongoose = require('mongoose');
 const { ALL_ROLES } = require('../config/roles');
-const { isWeekendDate, dayName } = require('../config/schedule');
 
 const assignmentSchema = new mongoose.Schema(
   {
@@ -58,17 +57,7 @@ eventSchema.methods.toCard = function () {
     roleCapacities[role] = (this.roleCapacities && this.roleCapacities.get(role)) || 0;
     assignments[role] = (this.assignments && this.assignments.get(role)) || [];
   }
-  // Derived, never stored: which side of the week this event falls on decides
-  // whether the one-event-per-marshal rule applies. Computed here so the
-  // frontend reads a flag instead of re-implementing the date logic (and the
-  // timezone trap that comes with it).
-  return {
-    ...obj,
-    roleCapacities,
-    assignments,
-    isWeekend: isWeekendDate(this.date),
-    dayName: dayName(this.date),
-  };
+  return { ...obj, roleCapacities, assignments };
 };
 
 module.exports = mongoose.model('Event', eventSchema);
