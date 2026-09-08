@@ -880,130 +880,35 @@
   }
 
   // ---------------- Announcement ----------------
-  //
-  // The announcement is plain text pasted into group chats, so the styling has
-  // to survive a proportional font and a narrow phone screen. That rules out
-  // column alignment (spaces don't line up) and long horizontal rules (they
-  // wrap). What is left: icons, short rules, and blank lines between blocks.
-  //
-  // Every icon lives in this one map -- change the look here rather than
-  // hunting through the builder.
-  const ANNOUNCE_ICONS = {
-    title: '📣',
-    date: '🗓',
-    venue: '📍',
-    teamLead: '👤',
-    offsite: '🤝',
-    categories: '🏁',
-    gunstart: '🔔',
-    callTime: '⏰',
-    maxRunners: '👥',
-    meals: '🍽',
-    details: '📋',
-    lineup: '👷',
-    role: '🔹',
-    logistics: '🚚',
-    transpo: '🚐',
-    driver: '🧑',
-    contact: '📱',
-    rate: '💵',
-  };
+  function copyAnnouncement(ev) {
+    const lines = [];
+    lines.push(ev.name.toUpperCase());
+    lines.push(formatDate(ev.date));
+    lines.push(ev.location.toUpperCase());
+    lines.push(`TEAM LEAD: ${ev.teamLeader || ''}`);
+    lines.push(`OFF SITE SUPPORT: ${ev.offsiteSupport || ''}`);
+    lines.push(`CATEGORIES: ${ev.categories || ''}`);
+    if (ev.gunstart) lines.push(`GUNSTART: ${ev.gunstart}`);
+    lines.push(`CALL TIME: ${ev.callTime || ''}`);
+    lines.push(`MAX NO.RUNNERS: ${ev.maxRunners || ''}`);
+    lines.push(`MEALS: ${ev.meals || ''}`);
 
-  const ANNOUNCE_RULE = '────────────────';
-
-  const cleanValue = (v) => String(v === null || v === undefined ? '' : v).trim();
-
-  // "42KM|21KM|10KM" -> "42KM | 21KM | 10KM". The pipes are how the team types
-  // these fields; they just need room to breathe once they're in a message.
-  const spaceSeparators = (v) => cleanValue(v).replace(/\s*\|\s*/g, ' | ');
-
-  /**
-   * Long, human date for the announcement header: "Sunday, September 13, 2026".
-   * Built from the date parts rather than `new Date(str)` -- see formatDate for
-   * why that would shift the calendar day west of UTC. Prefers the day name the
-   * server already derived.
-   */
-  function announcementDate(ev) {
-    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(cleanValue(ev.date));
-    if (!m) return cleanValue(ev.date);
-    const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-    if (Number.isNaN(d.getTime())) return cleanValue(ev.date);
-    const day = ev.dayName || d.toLocaleDateString('en-US', { weekday: 'long' });
-    const rest = d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-    return `${day}, ${rest}`;
-  }
-
-  /**
-   * Builds the announcement text. Any field left blank is omitted entirely --
-   * no "TEAM LEAD:" with nothing after it -- and a section whose every field is
-   * blank disappears along with its heading.
-   */
-  function buildAnnouncement(ev) {
-    const I = ANNOUNCE_ICONS;
-    const blocks = [];
-
-    // ---- Headline ----
-    const head = [`${I.title}  ${cleanValue(ev.name).toUpperCase()}`];
-    const when = announcementDate(ev);
-    if (when) head.push(`${I.date}  ${when}`);
-    const venue = cleanValue(ev.location);
-    if (venue) head.push(`${I.venue}  ${venue}`);
-    blocks.push(head.join('\n'));
-
-    // ---- Event details ----
-    const details = [
-      [I.teamLead, 'Team Lead', ev.teamLeader],
-      [I.offsite, 'Off Site Support', ev.offsiteSupport],
-      [I.categories, 'Categories', spaceSeparators(ev.categories)],
-      [I.gunstart, 'Gun Start', spaceSeparators(ev.gunstart)],
-      [I.callTime, 'Call Time', ev.callTime],
-      [I.maxRunners, 'Max Runners', ev.maxRunners],
-      [I.meals, 'Meals', ev.meals],
-    ]
-      .filter(([, , value]) => cleanValue(value) !== '')
-      .map(([icon, label, value]) => `${icon}  ${label}: ${cleanValue(value)}`);
-
-    if (details.length) {
-      blocks.push([`${I.details}  EVENT DETAILS`, ANNOUNCE_RULE, '', ...details].join('\n'));
-    }
-
-    // ---- Marshal lineup ----
-    const lineup = [];
     ALL_ROLES.forEach((role) => {
       const assigned = ev.assignments[role] || [];
-      if (assigned.length === 0) return; // unfilled roles stay out of the post
-      if (lineup.length) lineup.push('');
-      lineup.push(`${I.role}  ${role.toUpperCase()}`);
+      if (assigned.length === 0) return;
+      lines.push(`${role.toUpperCase()}:`);
       assigned.forEach((a, i) => {
-        const note = cleanValue(a.note);
-        lineup.push(`     ${i + 1}.  ${cleanValue(a.name)}${note ? ` — ${note}` : ''}`);
+        lines.push(`${i + 1} ${a.name}${a.note ? ` - ${a.note}` : ''}`);
       });
     });
 
-    if (lineup.length) {
-      blocks.push([`${I.lineup}  MARSHAL LINEUP`, ANNOUNCE_RULE, '', ...lineup].join('\n'));
-    }
+    if (ev.transpo) lines.push(`TRANSPO: ${ev.transpo}`);
+    if (ev.driver) lines.push(`DRIVER: ${ev.driver}`);
+    if (ev.driverNumber) lines.push(ev.driverNumber);
+    if (ev.rate) lines.push(`RATE: ${ev.rate}`);
 
-    // ---- Logistics ----
-    const logistics = [
-      [I.transpo, 'Transportation', ev.transpo],
-      [I.driver, 'Driver', ev.driver],
-      [I.contact, 'Contact', ev.driverNumber],
-      [I.rate, 'Rate', ev.rate],
-    ]
-      .filter(([, , value]) => cleanValue(value) !== '')
-      .map(([icon, label, value]) => `${icon}  ${label}: ${cleanValue(value)}`);
-
-    if (logistics.length) {
-      blocks.push([`${I.logistics}  LOGISTICS`, ANNOUNCE_RULE, '', ...logistics].join('\n'));
-    }
-
-    // One blank line between blocks; nothing trailing.
-    return blocks.join('\n\n');
-  }
-
-  function copyAnnouncement(ev) {
-    copyToClipboard(buildAnnouncement(ev));
+    const text = lines.join('\n');
+    copyToClipboard(text);
   }
 
   function copyToClipboard(text) {
@@ -1039,13 +944,8 @@
   function escapeHtml(str) {
     return String(str || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
-  // "2026-09-13" is a bare calendar date. Passing it to `new Date()` parses it
-  // as UTC midnight, so anywhere west of UTC this rendered the PREVIOUS day --
-  // the same trap server/config/schedule.js avoids. Build from the parts so the
-  // calendar date is whatever was typed, wherever this runs.
   function formatDate(d) {
-    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(d || ''));
-    const date = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(d);
+    const date = new Date(d);
     if (isNaN(date.getTime())) return d;
     return date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' });
   }
