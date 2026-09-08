@@ -5,7 +5,8 @@
   document.getElementById('welcomeText').textContent = `${user.firstName} ${user.lastName}`;
   document.getElementById('logoutBtn').addEventListener('click', () => Auth.logout());
 
-  // Keep in sync with server/config/roles.js
+  // Keep in sync with server/config/roles.js (append, never insert -- saved
+  // events key their capacities/assignments by role name).
   const ROLES_WITH_CAPACITY = [
     'Operator',
     'Spotter',
@@ -15,6 +16,7 @@
     'Tech Support',
     'Kit Claiming Staff',
     'Registration Staff',
+    'Fulfillment',
   ];
   const ALL_ROLES = [...ROLES_WITH_CAPACITY];
 
@@ -230,6 +232,13 @@
     announceBtn.textContent = 'Generate Announcement';
     announceBtn.addEventListener('click', () => copyAnnouncement(ev));
     footer.appendChild(announceBtn);
+
+    const pdfBtn = document.createElement('button');
+    pdfBtn.className = 'btn-secondary';
+    pdfBtn.textContent = 'Export PDF';
+    pdfBtn.title = 'Download the marshal list as a PDF, laid out like the ITEMHOUND template';
+    pdfBtn.addEventListener('click', () => exportEventPdf(ev, pdfBtn));
+    footer.appendChild(pdfBtn);
 
     if (editable) {
       const completeBtn = document.createElement('button');
@@ -768,6 +777,59 @@
   function getMarshalRating(marshalId) {
     const m = allMarshals.find((mm) => String(mm._id) === String(marshalId));
     return m ? m.rating : null;
+  }
+
+  // ---------------- PDF export ----------------
+  async function exportEventPdf(ev, btn) {
+    const original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Preparing…';
+    try {
+      const res = await fetch(`/api/admin/events/${ev._id}/pdf`, {
+        headers: { Authorization: `Bearer ${Auth.getToken()}` },
+      });
+
+      if (!res.ok) {
+        let message = `Export failed (${res.status})`;
+        try {
+          const data = await res.json();
+          if (data && data.error) message = data.error;
+        } catch (err) { /* not JSON -- keep the status message */ }
+        throw new Error(message);
+      }
+
+      const blob = await res.blob();
+      const name = filenameFromDisposition(res.headers.get('Content-Disposition'))
+        || `${ev.name} MARSHALS LIST.pdf`;
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      // Revoked on a delay: Safari needs the object URL alive past the click.
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+
+      showToast('PDF exported.', 'success');
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = original;
+    }
+  }
+
+  // Prefers the RFC 5987 filename* parameter, which carries non-ASCII names.
+  function filenameFromDisposition(header) {
+    if (!header) return null;
+    const utf8 = /filename\*=UTF-8''([^;]+)/i.exec(header);
+    if (utf8) {
+      try { return decodeURIComponent(utf8[1].trim()); } catch (err) { /* fall through */ }
+    }
+    const plain = /filename="?([^";]+)"?/i.exec(header);
+    return plain ? plain[1].trim() : null;
   }
 
   // ---------------- Announcement ----------------

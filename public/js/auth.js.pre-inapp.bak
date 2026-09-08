@@ -13,20 +13,6 @@
   const googleSignInButton = document.getElementById('googleSignInButton');
 
   function clearAlert() { alertBox.innerHTML = ''; }
-
-  // Signing in can succeed on the server and still fail here if the browser
-  // refuses to store the session -- which is exactly what happens in some
-  // in-app browsers and private windows. Navigating on would just bounce the
-  // user straight back to this page, so say what happened instead.
-  function reportStorageBlocked() {
-    const where = window.InApp && window.InApp.active && window.InApp.appName
-      ? `${window.InApp.appName}'s built-in browser`
-      : 'this browser';
-    setAlert(`You signed in, but ${where} won't let the app remember it. Open this page in your normal browser and sign in there.`);
-    if (window.InApp && window.InApp.active) {
-      window.InApp.renderNotice(document.getElementById('googleSignInSection'), 'blocking');
-    }
-  }
   function setAlert(message, type = 'error') {
     alertBox.innerHTML = `<div class="alert alert-${type}">${message}</div>`;
   }
@@ -55,7 +41,7 @@
     const password = document.getElementById('loginPassword').value;
     try {
       const data = await apiRequest('/auth/login', { method: 'POST', body: { username, password } });
-      if (!Auth.setSession(data.token, data.user)) return reportStorageBlocked();
+      Auth.setSession(data.token, data.user);
       routeAfterLogin(data.user);
     } catch (err) {
       setAlert(err.message);
@@ -67,7 +53,7 @@
     clearAlert();
     try {
       const data = await apiRequest('/auth/google', { method: 'POST', body: { credential: response.credential } });
-      if (!Auth.setSession(data.token, data.user)) return reportStorageBlocked();
+      Auth.setSession(data.token, data.user);
       routeAfterLogin(data.user);
     } catch (err) {
       setAlert(err.message);
@@ -93,17 +79,6 @@
   }
 
   async function initGoogleSignIn() {
-    // Embedded webviews (Messenger, Facebook, Instagram, ...) cannot complete
-    // a Google sign-in -- Google rejects them with `disallowed_useragent`.
-    // Rendering the button there just walks the user into a blank screen, so
-    // explain the situation instead of offering a control that cannot work.
-    if (window.InApp && window.InApp.active) {
-      googleSignInButton.style.display = 'none';
-      googleUnavailableMsg.style.display = 'none';
-      window.InApp.renderNotice(document.getElementById('googleSignInSection'), 'blocking');
-      return;
-    }
-
     try {
       const [{ googleClientId }, googleReady] = await Promise.all([
         apiRequest('/auth/config'),

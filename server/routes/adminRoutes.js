@@ -2,6 +2,7 @@ const express = require('express');
 const Event = require('../models/Event');
 const Marshal = require('../models/Marshal');
 const Exemption = require('../models/Exemption');
+const { renderToBuffer, fileNameFor } = require('../services/marshalListPdf');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { ALL_ROLES, ROLES_WITH_EVENT_CAPACITY } = require('../config/roles');
 
@@ -368,6 +369,46 @@ router.post('/events/:id/reopen', async (req, res) => {
   } catch (err) {
     console.error('Reopen event error:', err);
     res.status(500).json({ error: 'Could not reopen event.' });
+  }
+});
+
+// ---------- PDF export ----------
+
+// GET /api/admin/events/:id/pdf -- the event's marshal list as a PDF laid out
+// like the ITEMHOUND "MARSHALS LIST" spreadsheet template. Works for active
+// and completed events alike, so All Events can export too.
+//
+// The PDF is built into a Buffer before anything is sent: once bytes are
+// streamed the status and headers are committed, and a mid-render failure
+// would leave the browser with a truncated file instead of an error it can
+// show in a toast.
+router.get('/events/:id/pdf', async (req, res) => {
+  try {
+    const event = await Event.findById(req.params.id);
+    if (!event) return res.status(404).json({ error: 'Event not found' });
+
+    const card = event.toCard();
+    const buffer = await renderToBuffer(card, ALL_ROLES);
+    const name = fileNameFor(card);
+    // Quote for the spaces, and add the RFC 5987 form so a non-ASCII event
+    // name survives; the plain filename is stripped to ASCII as a fallback.
+    const asciiName = name.replace(/[^\x20-\x7E]/g, '_');
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(name)}`
+    );
+    res.setHeader('Content-Length', buffer.length);
+    res.send(buffer);
+  } catch (err) {
+    console.error('PDF export error:', err);
+    const missingDep = err && (err.code === 'MODULE_NOT_FOUND' || /pdfkit/i.test(err.message || ''));
+    res.status(500).json({
+      error: missingDep
+        ? 'PDF export needs the pdfkit package. Run "npm install" in the project folder and restart the server.'
+        : `Could not build the PDF: ${err.message}`,
+    });
   }
 });
 

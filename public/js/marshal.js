@@ -22,6 +22,12 @@
     }
   })();
 
+  // Advisory only -- these pages work in a webview, but if the marshal got
+  // here from a Messenger link, warn them before something else surprises them.
+  if (window.InApp && window.InApp.active) {
+    window.InApp.renderNotice(document.getElementById('inappNotice'), 'advisory');
+  }
+
   const alertBox = document.getElementById('alertBox');
   const currentSubmissionBox = document.getElementById('currentSubmissionBox');
   const eventsGrid = document.getElementById('eventsCheckboxGrid');

@@ -4,6 +4,12 @@
   const user = Auth.requireRole('marshal', { allowIncompleteProfile: true });
   if (!user) return;
 
+  // Advisory only -- these pages work in a webview, but if the marshal got
+  // here from a Messenger link, warn them before something else surprises them.
+  if (window.InApp && window.InApp.active) {
+    window.InApp.renderNotice(document.getElementById('inappNotice'), 'advisory');
+  }
+
   const alertBox = document.getElementById('alertBox');
   const form = document.getElementById('profileForm');
 
@@ -20,7 +26,9 @@
         return;
       }
       if (fresh.profileComplete) {
-        Auth.setSession(Auth.getToken(), fresh);
+        // If the session cannot be re-saved, marshal.html would bounce right
+        // back here -- stay put and let the guard explain instead.
+        if (!Auth.setSession(Auth.getToken(), fresh)) return;
         window.location.href = 'marshal.html';
         return;
       }
@@ -42,7 +50,10 @@
     };
     try {
       const data = await apiRequest('/auth/profile', { method: 'PUT', body: payload });
-      Auth.setSession(Auth.getToken(), data.user);
+      if (!Auth.setSession(Auth.getToken(), data.user)) {
+        setAlert("Your details were saved, but this browser won't remember your sign-in. Open this page in your normal browser to continue.");
+        return;
+      }
       window.location.href = 'marshal.html';
     } catch (err) {
       setAlert(err.message);

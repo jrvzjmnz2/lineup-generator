@@ -984,12 +984,15 @@ label {
 
 .card-footer {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--sp-2);
   padding: var(--sp-4) var(--sp-5);
   border-top: 1px solid var(--line);
   background: var(--wash-gray);
 }
-.card-footer button { flex: 1; }
+/* Four actions (Announcement, Export PDF, Complete/Reopen, Delete) do not fit
+   one row on a narrow card, so they share rows instead of squashing. */
+.card-footer button { flex: 1 1 auto; min-width: 138px; }
 
 /* ==========================  MARSHAL POOL  ============================= */
 
@@ -1473,3 +1476,53 @@ label {
   .sidebar-foot > button { white-space: nowrap; }
   .sidebar-user { flex-wrap: nowrap; }
 }
+
+/* ==========================  IN-APP BROWSER NOTICE  ====================
+   Shown when the page is open inside an embedded webview (Messenger,
+   Facebook, Instagram, ...). Google blocks OAuth in those browsers, so on
+   the sign-in page this REPLACES the Google button rather than sitting
+   beside it. Brand palette only: gray wash, maroon edge on the blocking
+   variant, slate edge on the advisory one. */
+
+.inapp-notice {
+  background: var(--wash-gray);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--slate);
+  border-radius: var(--r-md);
+  padding: var(--sp-4);
+  margin: var(--sp-4) 0;
+  text-align: left;
+}
+.inapp-notice-blocking {
+  border-left-color: var(--maroon);
+  background: var(--wash-maroon);
+  border-color: rgba(99, 10, 31, 0.16);
+}
+.inapp-notice-title {
+  font-family: var(--font-head);
+  font-weight: 600;
+  font-size: var(--fs-sm);
+  color: var(--text);
+  margin: 0 0 6px;
+}
+.inapp-notice-body {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  margin: 0 0 var(--sp-4);
+  line-height: 1.55;
+}
+.inapp-notice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+/* The Open-in-Chrome control is an <a> styled as a button, so it needs the
+   button box model that the element selector does not give it. */
+.inapp-notice-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+.inapp-notice-actions .btn:hover { text-decoration: none; }
+.inapp-notice-actions button { min-width: 104px; }
