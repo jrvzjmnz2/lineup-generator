@@ -2,9 +2,23 @@ const mongoose = require('mongoose');
 const { ALL_ROLES } = require('../config/roles');
 const { isWeekendDate, dayName } = require('../config/schedule');
 
+// A role slot holds either a MARSHAL (someone who submitted the sign-up form)
+// or an EMPLOYEE (a name from the employee_list roster). Exactly one of the two
+// ids is set, and `kind` says which.
+//
+// Employees are deliberately unconstrained: they can take several roles in one
+// event, appear on any event, and the weekend one-event rule does not apply to
+// them. See the assign route.
+//
+// `marshalId` is no longer `required` -- an employee entry has none. Entries
+// written before this change have no `kind` field at all, so every read treats
+// "not explicitly employee" as a marshal. That keeps existing events working
+// with no migration.
 const assignmentSchema = new mongoose.Schema(
   {
-    marshalId: { type: mongoose.Schema.Types.ObjectId, ref: 'Marshal', required: true },
+    kind: { type: String, enum: ['marshal', 'employee'], default: 'marshal' },
+    marshalId: { type: mongoose.Schema.Types.ObjectId, ref: 'Marshal' },
+    employeeId: { type: mongoose.Schema.Types.ObjectId, ref: 'Employee' },
     name: { type: String, required: true }, // denormalized full name for fast card rendering
     note: { type: String, default: '' }, // e.g. "5KM" category tag shown next to the name
   },

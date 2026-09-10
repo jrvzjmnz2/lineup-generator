@@ -88,9 +88,12 @@ function buildRows(event, allRoles) {
     const assigned = (event.assignments && event.assignments[role]) || [];
     assigned.forEach((a, i) => {
       const note = (a.note || '').trim();
+      // Staff off the employee_list roster are marked so the printed lineup
+      // distinguishes them from marshals who signed up.
+      const tag = a.kind === 'employee' ? ' (EMPLOYEE)' : '';
       rows.push({
         role: role.toUpperCase(),
-        name: String(a.name || '').toUpperCase() + (note ? ` - ${note.toUpperCase()}` : ''),
+        name: String(a.name || '').toUpperCase() + tag + (note ? ` - ${note.toUpperCase()}` : ''),
         count: String(i + 1),
       });
     });

@@ -2,6 +2,7 @@ const express = require('express');
 const Event = require('../models/Event');
 const Marshal = require('../models/Marshal');
 const Exemption = require('../models/Exemption');
+const Employee = require('../models/Employee');
 const { renderToBuffer, fileNameFor } = require('../services/marshalListPdf');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { ALL_ROLES, ROLES_WITH_EVENT_CAPACITY } = require('../config/roles');
@@ -32,12 +33,23 @@ async function findExistingWeekendAssignment(marshalId, excludeEventId = null) {
     const assignments = ev.assignments || {};
     for (const role of Object.keys(assignments)) {
       const list = assignments[role] || [];
-      if (list.some((a) => String(a.marshalId) === String(marshalId))) {
+      // Employee entries have no marshalId, but be explicit: an employee on a
+      // weekend event must never make a marshal look booked.
+      if (list.some((a) => a.kind !== 'employee' && String(a.marshalId) === String(marshalId))) {
         return { eventId: ev._id, eventName: ev.name, eventDate: ev.date, role };
       }
     }
   }
   return null;
+}
+
+// Does this assignment entry refer to the marshal/employee named in the body?
+// An entry with no explicit kind is a marshal (pre-existing data).
+function matchesAssignee(entry, { marshalId, employeeId }) {
+  if (employeeId) {
+    return entry.kind === 'employee' && String(entry.employeeId) === String(employeeId);
+  }
+  return entry.kind !== 'employee' && String(entry.marshalId) === String(marshalId);
 }
 
 // Marshal IDs currently exempt from the single-active-event rule, as a Set
@@ -75,6 +87,7 @@ async function buildAttendanceMap() {
     const assignments = ev.assignments || {};
     for (const role of Object.keys(assignments)) {
       for (const a of assignments[role] || []) {
+        if (a.kind === 'employee') continue; // employees have no Marshal List row
         const key = String(a.marshalId);
         if (!map[key]) map[key] = [];
         map[key].push({
@@ -161,6 +174,23 @@ router.get('/marshals', async (req, res) => {
   res.json({ marshals });
 });
 
+// GET /api/admin/employees -- the employee_list roster, for the dropdown at the
+// bottom of each event's pool card. Sorted the same case-insensitive way the
+// marshal lists are.
+router.get('/employees', async (req, res) => {
+  try {
+    const employees = await Employee.find()
+      .collation({ locale: 'en', strength: 2 })
+      .sort({ name: 1 })
+      .select('_id name')
+      .lean();
+    res.json({ employees });
+  } catch (err) {
+    console.error('Employee list error:', err);
+    res.status(500).json({ error: 'Could not load the employee list.' });
+  }
+});
+
 // GET /api/admin/marshal-list -- every marshal, their rating, and their full event attendance history
 router.get('/marshal-list', async (req, res) => {
   try {
@@ -243,59 +273,98 @@ router.post('/events/:id/capacity', async (req, res) => {
   }
 });
 
-// POST /api/admin/events/:id/assign -- drag a marshal into a role slot
+// POST /api/admin/events/:id/assign -- drag a marshal OR an employee into a slot
+//
+// Send `marshalId` for a marshal, or `employeeId` for someone off the
+// employee_list roster. The two differ in what is checked:
+//   marshal  -- weekend one-event rule (unless exempt), one slot only
+//   employee -- no weekend rule, no cross-event rule, may hold several roles
+//               in the same event
+// Both are still bound by the role's slot capacity.
 router.post('/events/:id/assign', async (req, res) => {
   try {
-    const { role, marshalId } = req.body;
+    const { role, marshalId, employeeId } = req.body;
     if (!ALL_ROLES.includes(role)) return res.status(400).json({ error: 'Unknown role' });
+    if (!marshalId && !employeeId) {
+      return res.status(400).json({ error: 'Provide either a marshalId or an employeeId' });
+    }
 
     const event = await Event.findById(req.params.id);
     if (!event) return res.status(404).json({ error: 'Event not found' });
     if (event.status !== 'active') return res.status(400).json({ error: 'Event is not active' });
 
-    const marshal = await Marshal.findById(marshalId).lean();
-    if (!marshal) return res.status(404).json({ error: 'Marshal not found' });
-
-    // Weekend events keep the one-role-one-event restriction; weekday events
-    // are unrestricted. A per-cycle exemption bypasses both.
-    if (isWeekendDate(event.date)) {
-      const exemptIds = await getExemptMarshalIdSet();
-      if (!exemptIds.has(String(marshalId))) {
-        const existing = await findExistingWeekendAssignment(marshalId);
-        if (existing) {
-          const when = dayName(existing.eventDate);
-          return res.status(409).json({
-            error: `${marshal.firstName} ${marshal.lastName} is already assigned to ${existing.role} on "${existing.eventName}"${when ? ` (${when})` : ''}. Weekend events allow one event per marshal \u2014 star them as exempt if they really are working both.`,
-          });
-        }
-      }
-    }
-
-    const capacity = (event.roleCapacities && event.roleCapacities.get(role)) || 0;
     const currentList = (event.assignments && event.assignments.get(role)) || [];
+    const capacity = (event.roleCapacities && event.roleCapacities.get(role)) || 0;
     if (currentList.length >= capacity) {
       return res.status(400).json({ error: `${role} is already full (${capacity} slot${capacity === 1 ? '' : 's'})` });
     }
 
     const note = (req.body.note || '').trim();
-    const name = `${marshal.firstName} ${marshal.lastName}`.trim().toUpperCase();
+    let entry;
+
+    if (employeeId) {
+      const employee = await Employee.findById(employeeId).lean();
+      if (!employee) return res.status(404).json({ error: 'Employee not found' });
+
+      // Employees may take several roles in one event, but not the same role
+      // twice -- that only ever produces a duplicate line on the lineup.
+      const alreadyInThisRole = currentList.some(
+        (a) => a.kind === 'employee' && String(a.employeeId) === String(employeeId)
+      );
+      if (alreadyInThisRole) {
+        return res.status(409).json({
+          error: `${employee.name} is already in ${role} on this event. Employees can take other roles here, just not this one twice.`,
+        });
+      }
+
+      entry = {
+        kind: 'employee',
+        employeeId: employee._id,
+        name: String(employee.name || '').trim().toUpperCase(),
+        note,
+      };
+    } else {
+      const marshal = await Marshal.findById(marshalId).lean();
+      if (!marshal) return res.status(404).json({ error: 'Marshal not found' });
+
+      // Weekend events keep the one-role-one-event restriction; weekday events
+      // are unrestricted. A per-cycle exemption bypasses both.
+      if (isWeekendDate(event.date)) {
+        const exemptIds = await getExemptMarshalIdSet();
+        if (!exemptIds.has(String(marshalId))) {
+          const existing = await findExistingWeekendAssignment(marshalId);
+          if (existing) {
+            const when = dayName(existing.eventDate);
+            return res.status(409).json({
+              error: `${marshal.firstName} ${marshal.lastName} is already assigned to ${existing.role} on "${existing.eventName}"${when ? ` (${when})` : ''}. Weekend events allow one event per marshal \u2014 star them as exempt if they really are working both.`,
+            });
+          }
+        }
+      }
+
+      entry = {
+        kind: 'marshal',
+        marshalId: marshal._id,
+        name: `${marshal.firstName} ${marshal.lastName}`.trim().toUpperCase(),
+        note,
+      };
+    }
 
     if (!event.assignments) event.assignments = new Map();
-    const updatedList = [...currentList, { marshalId: marshal._id, name, note }];
-    event.assignments.set(role, updatedList);
+    event.assignments.set(role, [...currentList, entry]);
     await event.save();
 
     res.json({ event: event.toCard() });
   } catch (err) {
     console.error('Assign error:', err);
-    res.status(500).json({ error: 'Could not assign marshal.' });
+    res.status(500).json({ error: 'Could not assign to that slot.' });
   }
 });
 
 // POST /api/admin/events/:id/note -- edit the note shown next to an assigned marshal (e.g. "5KM")
 router.post('/events/:id/note', async (req, res) => {
   try {
-    const { role, marshalId, note } = req.body;
+    const { role, marshalId, employeeId, note } = req.body;
     if (!ALL_ROLES.includes(role)) return res.status(400).json({ error: 'Unknown role' });
 
     const event = await Event.findById(req.params.id);
@@ -303,7 +372,9 @@ router.post('/events/:id/note', async (req, res) => {
 
     const currentList = (event.assignments && event.assignments.get(role)) || [];
     const updatedList = currentList.map((a) =>
-      String(a.marshalId) === String(marshalId) ? { ...a.toObject ? a.toObject() : a, note: (note || '').trim() } : a
+      matchesAssignee(a, { marshalId, employeeId })
+        ? { ...(a.toObject ? a.toObject() : a), note: (note || '').trim() }
+        : a
     );
     if (!event.assignments) event.assignments = new Map();
     event.assignments.set(role, updatedList);
@@ -316,17 +387,17 @@ router.post('/events/:id/note', async (req, res) => {
   }
 });
 
-// POST /api/admin/events/:id/unassign -- remove a marshal from a role slot
+// POST /api/admin/events/:id/unassign -- remove a marshal or employee from a slot
 router.post('/events/:id/unassign', async (req, res) => {
   try {
-    const { role, marshalId } = req.body;
+    const { role, marshalId, employeeId } = req.body;
     if (!ALL_ROLES.includes(role)) return res.status(400).json({ error: 'Unknown role' });
 
     const event = await Event.findById(req.params.id);
     if (!event) return res.status(404).json({ error: 'Event not found' });
 
     const currentList = (event.assignments && event.assignments.get(role)) || [];
-    const updatedList = currentList.filter((a) => String(a.marshalId) !== String(marshalId));
+    const updatedList = currentList.filter((a) => !matchesAssignee(a, { marshalId, employeeId }));
     if (!event.assignments) event.assignments = new Map();
     event.assignments.set(role, updatedList);
     await event.save();

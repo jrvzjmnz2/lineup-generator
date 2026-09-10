@@ -128,25 +128,17 @@
   // disables a marshal anywhere.
   let assignedMap = {};
   let exemptMarshalIds = new Set(); // marshalIds exempt from the single-active-event rule this cycle
-  let allEmployees = []; // the employee_list roster, for the pool-card dropdown
-  // eventId -> [employeeId] currently staged as draggable chips on that card.
-  // UI-only: staging just reveals a drag source, so it lives for the session
-  // and does not need persisting. It has to survive renderCreateList(), which
-  // rebuilds the whole grid after every assign.
-  const stagedEmployees = new Map();
 
   async function loadCreateList() {
     try {
-      const [{ events }, { marshals }, { marshalIds }, { employees }] = await Promise.all([
+      const [{ events }, { marshals }, { marshalIds }] = await Promise.all([
         apiRequest('/admin/events?status=active'),
         apiRequest('/admin/marshals'),
         apiRequest('/admin/exemptions'),
-        apiRequest('/admin/employees'),
       ]);
       allActiveEvents = events;
       allMarshals = marshals;
       exemptMarshalIds = new Set(marshalIds);
-      allEmployees = employees || [];
       buildAssignedMap();
       renderCreateList();
     } catch (err) {
@@ -391,20 +383,15 @@
     if (assigned.length === 0) {
       const hint = document.createElement('div');
       hint.className = 'slot-empty-hint';
-      hint.textContent = editable ? 'Drag a marshal or employee here' : 'Unfilled';
+      hint.textContent = editable ? 'Drag a marshal here' : 'Unfilled';
       slot.appendChild(hint);
     } else {
       assigned.forEach((a) => {
-        const isEmployee = a.kind === 'employee';
-        // Whichever id this entry carries is what note/unassign must key on.
-        const ref = isEmployee ? { employeeId: a.employeeId } : { marshalId: a.marshalId };
-
         const chip = document.createElement('div');
-        chip.className = 'assigned-chip' + (isEmployee ? ' employee' : '');
+        chip.className = 'assigned-chip';
 
         if (editable) {
-          // Employees have no rating, so no tint -- the badge identifies them.
-          const rating = isEmployee ? null : getMarshalRating(a.marshalId);
+          const rating = getMarshalRating(a.marshalId);
           const bg = ratingColor(rating);
           if (bg) {
             chip.style.background = bg;
@@ -414,17 +401,6 @@
 
           const nameSpan = document.createElement('span');
           nameSpan.textContent = a.name;
-          const left = document.createElement('span');
-          left.style.display = 'flex';
-          left.style.alignItems = 'center';
-          left.appendChild(nameSpan);
-          if (isEmployee) {
-            const badge = document.createElement('span');
-            badge.className = 'emp-badge';
-            badge.textContent = 'EMP';
-            badge.title = 'From the employee list — not bound by the weekend one-event rule';
-            left.appendChild(badge);
-          }
           const noteInput = document.createElement('input');
           noteInput.type = 'text';
           noteInput.value = a.note || '';
@@ -433,7 +409,11 @@
           noteInput.style.marginLeft = '6px';
           noteInput.style.padding = '2px 6px';
           noteInput.style.fontSize = '11.5px';
-          noteInput.addEventListener('change', () => updateNote(ev._id, role, ref, noteInput.value));
+          noteInput.addEventListener('change', () => updateNote(ev._id, role, a.marshalId, noteInput.value));
+          const left = document.createElement('span');
+          left.style.display = 'flex';
+          left.style.alignItems = 'center';
+          left.appendChild(nameSpan);
           left.appendChild(noteInput);
           chip.appendChild(left);
 
@@ -441,10 +421,10 @@
           removeBtn.className = 'remove-btn';
           removeBtn.textContent = '×';
           removeBtn.title = 'Remove';
-          removeBtn.addEventListener('click', () => unassignMarshal(ev._id, role, ref));
+          removeBtn.addEventListener('click', () => unassignMarshal(ev._id, role, a.marshalId));
           chip.appendChild(removeBtn);
         } else {
-          chip.innerHTML = `<span>${escapeHtml(a.name)}${isEmployee ? ' <span class="emp-badge">EMP</span>' : ''}${a.note ? ` - ${escapeHtml(a.note)}` : ''}</span>`;
+          chip.innerHTML = `<span>${escapeHtml(a.name)}${a.note ? ` - ${escapeHtml(a.note)}` : ''}</span>`;
         }
         slot.appendChild(chip);
       });
@@ -459,9 +439,6 @@
       slot.addEventListener('drop', (e) => {
         e.preventDefault();
         slot.classList.remove('dragover');
-        // Two payload types so a slot can tell a marshal from an employee.
-        const employeeId = e.dataTransfer.getData('text/employee-id');
-        if (employeeId) return assignEmployee(ev._id, role, employeeId);
         const marshalId = e.dataTransfer.getData('text/marshal-id');
         if (marshalId) assignMarshal(ev._id, role, marshalId);
       });
@@ -549,113 +526,7 @@
     }
 
     poolCard.appendChild(pool);
-    poolCard.appendChild(buildEmployeePicker(ev));
     return poolCard;
-  }
-
-  // ---- Employees section at the bottom of each pool card ----------------
-  //
-  // Employees come from the employee_list roster rather than the sign-up form,
-  // so they are not in the marshal pool and are not restricted: they can hold
-  // several roles in one event, appear on any event, and the weekend
-  // one-event rule does not apply to them.
-  //
-  // Picking a name stages a draggable chip. Dragging it into a slot does NOT
-  // consume it -- employees are reusable, so the chip stays for another role.
-  // The x on a chip un-stages it.
-  function buildEmployeePicker(ev) {
-    const wrap = document.createElement('div');
-    wrap.className = 'employee-picker';
-
-    const heading = document.createElement('h4');
-    heading.textContent = 'Employees';
-    wrap.appendChild(heading);
-
-    const staged = stagedEmployees.get(ev._id) || [];
-
-    if (staged.length) {
-      const chips = document.createElement('div');
-      chips.className = 'marshal-pool employee-pool';
-      staged.forEach((employeeId) => {
-        const emp = allEmployees.find((e) => String(e._id) === String(employeeId));
-        if (!emp) return;
-
-        const chip = document.createElement('div');
-        chip.className = 'marshal-chip employee-chip';
-        chip.draggable = true;
-        chip.title = `${emp.name} — drag into any role. Reusable: stays here after you place them.`;
-
-        const nameSpan = document.createElement('span');
-        nameSpan.className = 'marshal-chip-name';
-        nameSpan.textContent = emp.name;
-        chip.appendChild(nameSpan);
-
-        const drop = document.createElement('button');
-        drop.type = 'button';
-        drop.className = 'unstage-btn';
-        drop.textContent = '×';
-        drop.title = 'Remove from this list (does not unassign anyone)';
-        drop.addEventListener('click', (e) => {
-          e.stopPropagation();
-          e.preventDefault();
-          unstageEmployee(ev._id, employeeId);
-        });
-        chip.appendChild(drop);
-
-        chip.addEventListener('dragstart', (e) => {
-          e.dataTransfer.setData('text/employee-id', String(employeeId));
-          chip.classList.add('dragging');
-        });
-        chip.addEventListener('dragend', () => chip.classList.remove('dragging'));
-
-        chips.appendChild(chip);
-      });
-      wrap.appendChild(chips);
-    }
-
-    const select = document.createElement('select');
-    select.className = 'employee-select';
-    select.setAttribute('aria-label', 'Add an employee to this event');
-
-    const placeholder = document.createElement('option');
-    placeholder.value = '';
-    placeholder.textContent = allEmployees.length
-      ? 'Add an employee…'
-      : 'No employees on file';
-    select.appendChild(placeholder);
-
-    allEmployees.forEach((emp) => {
-      const opt = document.createElement('option');
-      opt.value = emp._id;
-      opt.textContent = emp.name;
-      select.appendChild(opt);
-    });
-    select.disabled = allEmployees.length === 0;
-
-    select.addEventListener('change', () => {
-      const id = select.value;
-      select.value = ''; // reset so the same name can be picked again
-      if (id) stageEmployee(ev._id, id);
-    });
-
-    wrap.appendChild(select);
-    return wrap;
-  }
-
-  function stageEmployee(eventId, employeeId) {
-    const list = stagedEmployees.get(eventId) || [];
-    if (list.some((id) => String(id) === String(employeeId))) {
-      showToast('That employee is already in the list below.', '');
-      return;
-    }
-    stagedEmployees.set(eventId, [...list, employeeId]);
-    renderCreateList();
-  }
-
-  function unstageEmployee(eventId, employeeId) {
-    const list = stagedEmployees.get(eventId) || [];
-    stagedEmployees.set(eventId, list.filter((id) => String(id) !== String(employeeId)));
-    renderCreateList();
   }
 
   async function updateEventField(eventId, field, value) {
@@ -688,32 +559,18 @@
     }
   }
 
-  // `ref` is { marshalId } or { employeeId } -- whichever identifies the entry.
-  // Employees are never removed from the pool on assignment -- they are
-  // reusable, so the staged chip stays put for another role.
-  async function assignEmployee(eventId, role, employeeId) {
+  async function updateNote(eventId, role, marshalId, note) {
     try {
-      const { event } = await apiRequest(`/admin/events/${eventId}/assign`, { method: 'POST', body: { role, employeeId } });
-      replaceLocalEvent(event);
-    } catch (err) {
-      showToast(err.message, 'error');
-      loadCreateList();
-    }
-  }
-
-  // `ref` is { marshalId } or { employeeId } -- whichever identifies the entry.
-  async function updateNote(eventId, role, ref, note) {
-    try {
-      const { event } = await apiRequest(`/admin/events/${eventId}/note`, { method: 'POST', body: { role, ...ref, note } });
+      const { event } = await apiRequest(`/admin/events/${eventId}/note`, { method: 'POST', body: { role, marshalId, note } });
       replaceLocalEvent(event);
     } catch (err) {
       showToast(err.message, 'error');
     }
   }
 
-  async function unassignMarshal(eventId, role, ref) {
+  async function unassignMarshal(eventId, role, marshalId) {
     try {
-      const { event } = await apiRequest(`/admin/events/${eventId}/unassign`, { method: 'POST', body: { role, ...ref } });
+      const { event } = await apiRequest(`/admin/events/${eventId}/unassign`, { method: 'POST', body: { role, marshalId } });
       replaceLocalEvent(event);
     } catch (err) {
       showToast(err.message, 'error');

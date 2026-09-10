@@ -1568,3 +1568,80 @@ label {
 
 /* The weekend variant of the Generate Event date hint. */
 .field-hint-weekend { color: var(--text); font-weight: 600; }
+
+/* ==========================  EMPLOYEES (pool card)  ====================
+   Staff from the employee_list roster, picked from the dropdown at the bottom
+   of each pool card. They are unrestricted -- several roles per event, any
+   event, exempt from the weekend rule -- so they read as a distinct class of
+   chip: slate-edged rather than maroon-tinted, and never disabled. */
+
+.employee-picker {
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--line);
+}
+.employee-picker h4 {
+  margin: 0 0 var(--sp-3);
+  padding-bottom: 0;
+  border-bottom: 0;
+  font-family: var(--font-head);
+  font-size: var(--fs-eyebrow);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.employee-picker .employee-pool { margin-bottom: var(--sp-3); }
+
+.employee-select {
+  width: 100%;
+  padding: 7px 9px;
+  font-size: var(--fs-xs);
+}
+
+/* A staged employee chip: always draggable, never dimmed. The left bar marks
+   it as staff without using the rating tint, which employees do not have. */
+.marshal-chip.employee-chip {
+  border-color: var(--line-strong);
+  box-shadow: inset 3px 0 0 var(--slate);
+  padding-left: 13px;
+}
+:root[data-theme="dark"] .marshal-chip.employee-chip {
+  box-shadow: inset 3px 0 0 var(--gray);
+}
+.marshal-chip.employee-chip:hover { border-color: var(--hover-fill-bg); }
+
+.unstage-btn {
+  flex: 0 0 auto;
+  background: transparent;
+  border: 0;
+  color: var(--text-faint);
+  font-size: 15px;
+  line-height: 1;
+  padding: 0 2px;
+  cursor: pointer;
+  border-radius: var(--r-sm);
+}
+.unstage-btn:hover { color: var(--danger-fg); }
+
+/* Badge on an assigned employee, in the role slot. */
+.emp-badge {
+  flex: 0 0 auto;
+  margin-left: 6px;
+  font-family: var(--font-head);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: 100px;
+  background: var(--slate);
+  color: var(--white);
+  white-space: nowrap;
+}
+:root[data-theme="dark"] .emp-badge {
+  background: var(--gray);
+  color: var(--slate);
+}
+.assigned-chip.employee { box-shadow: inset 3px 0 0 var(--slate); padding-left: 6px; }
+:root[data-theme="dark"] .assigned-chip.employee { box-shadow: inset 3px 0 0 var(--gray); }
