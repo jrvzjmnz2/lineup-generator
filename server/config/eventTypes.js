@@ -51,7 +51,7 @@ const EVENT_TYPES = [
     // distinct operations on the cards, the sign-up form and the announcement.
     name: 'Bib Production',
     fields: ['teamLeader', 'callTime'],
-    roles: ['Fulfillment'],
+    roles: ['Bib Production'],
   },
 ];
 

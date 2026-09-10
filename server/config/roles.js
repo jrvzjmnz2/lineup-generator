@@ -24,6 +24,7 @@ const ROLES_WITH_EVENT_CAPACITY = [
   'Fulfillment',
   'Onsite Support',
   'Walk-ins',
+  'Bib Production',
 ];
 const ALL_ROLES = [...ROLES_WITH_EVENT_CAPACITY];
 

@@ -24,6 +24,7 @@
     'Fulfillment',
     'Onsite Support',
     'Walk-ins',
+    'Bib Production',
   ];
 
   // ---------------- Tabs ----------------
