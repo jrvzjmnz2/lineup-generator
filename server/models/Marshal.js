@@ -15,7 +15,26 @@ const marshalSchema = new mongoose.Schema(
     contactNumber: { type: String, required: true },
     // Events the marshal is willing to join (references Event._id)
     events: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Event' }],
-    // Roles the marshal is willing to fill (any of the 8 role names)
+
+    // Roles the marshal is willing to fill, PER EVENT TYPE:
+    //   { "Timing": ["Operator", "Spotter"], "Kit Claiming": ["Walk-ins"] }
+    //
+    // Roles stopped being a single flat choice once events gained types --
+    // the types have disjoint role sets, so "I'll be a Spotter" says nothing
+    // about what someone would do at a Kit Claiming event. The sign-up form
+    // asks per type and this is what it stores.
+    rolesByType: {
+      type: Map,
+      of: [String],
+      default: {},
+    },
+
+    // The flat union of every role above, kept in step on every submit.
+    //
+    // Deliberately redundant: it is what the pool-card tooltips and the
+    // Marshal List show ("preferred roles"), it is what every submission
+    // before types was stored as, and it means nothing that only wants "what
+    // is this person willing to do" has to walk the map.
     roles: [{ type: String }],
     submittedAt: { type: Date, default: Date.now },
     // Employee-set performance rating, 1 (low) - 10 (high). Not touched by

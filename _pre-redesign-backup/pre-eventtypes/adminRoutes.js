@@ -7,10 +7,6 @@ const { renderToBuffer, fileNameFor } = require('../services/marshalListPdf');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { ALL_ROLES, ROLES_WITH_EVENT_CAPACITY } = require('../config/roles');
 const { isWeekendDate, dayName } = require('../config/schedule');
-const {
-  EVENT_TYPES, EVENT_TYPE_NAMES, BASE_FIELDS, LOGISTICS_FIELDS,
-  isEventType, fieldsFor, rolesFor,
-} = require('../config/eventTypes');
 
 const router = express.Router();
 
@@ -74,28 +70,12 @@ async function clearExemptionsIfCycleEnded() {
   }
 }
 
-// Slot counts for exactly the roles this event type offers. A count sent for
-// any other role is dropped rather than stored -- otherwise a Fulfillment
-// event could be created carrying five Timing roles that its cards, sign-up
-// form and PDF would then all have to pretend aren't there.
-function buildDefaultCapacities(roleCounts, eventType) {
+function buildDefaultCapacities(roleCounts) {
   const capacities = {};
-  for (const role of rolesFor(eventType)) {
-    if (!ROLES_WITH_EVENT_CAPACITY.includes(role)) continue;
+  for (const role of ROLES_WITH_EVENT_CAPACITY) {
     capacities[role] = Math.max(0, parseInt(roleCounts && roleCounts[role], 10) || 0);
   }
   return capacities;
-}
-
-// The roles an event can actually be given capacity in / assigned to. Reads
-// the event's own type, so this is the one gate both routes go through.
-function allowedRoles(event) {
-  return rolesFor(event.eventType);
-}
-
-function unknownRoleError(role, event) {
-  const label = event.eventType || 'Untyped';
-  return `"${role}" is not a role on ${label} events. Available: ${allowedRoles(event).join(', ')}`;
 }
 
 // Build a marshalId -> [{ eventId, eventName, date, location, role, note, status }] map
@@ -125,59 +105,36 @@ async function buildAttendanceMap() {
   return map;
 }
 
-// ---------- event types ----------
-
-// GET /api/admin/event-types -- the type catalogue, so the Generate Event form
-// can build itself from the server's config instead of keeping a second copy
-// of the field/role table in the frontend and letting the two drift.
-router.get('/event-types', (req, res) => {
-  res.json({
-    types: EVENT_TYPES.map((t) => ({
-      name: t.name,
-      fields: fieldsFor(t.name),
-      roles: rolesFor(t.name),
-      hasLogistics: Boolean(t.logistics),
-    })),
-    baseFields: BASE_FIELDS,
-    logisticsFields: LOGISTICS_FIELDS,
-  });
-});
-
 // ---------- events ----------
 
 // POST /api/admin/events -- "Add Event" from the Generate Event tab
 router.post('/events', async (req, res) => {
   try {
-    const { eventType, roleCounts } = req.body;
+    const {
+      name, date, location, teamLeader, offsiteSupport, categories, gunstart,
+      callTime, maxRunners, meals, roleCounts,
+    } = req.body;
 
-    // The type is required on anything new. Only events predating types are
-    // allowed to be untyped, and those already exist.
-    if (!isEventType(eventType)) {
-      return res.status(400).json({
-        error: eventType
-          ? `Unknown event type "${eventType}". Choose one of: ${EVENT_TYPE_NAMES.join(', ')}`
-          : `Select an event type (${EVENT_TYPE_NAMES.join(', ')})`,
-      });
-    }
-
-    const missing = BASE_FIELDS.filter((f) => !req.body[f] || String(req.body[f]).trim() === '');
+    const missing = ['name', 'date', 'location'].filter((f) => !req.body[f] || String(req.body[f]).trim() === '');
     if (missing.length) {
       return res.status(400).json({ error: `Missing required field(s): ${missing.join(', ')}` });
     }
 
-    // Build the document from the TYPE's field list, not from whatever the
-    // request happened to contain. A stale form (or a hand-rolled request)
-    // sending gunstart to a Fulfillment event simply has it ignored, so a
-    // card can never display a field its type doesn't have.
-    const doc = { eventType, roleCapacities: buildDefaultCapacities(roleCounts, eventType), assignments: {}, status: 'active' };
-    for (const field of fieldsFor(eventType)) {
-      const raw = req.body[field];
-      doc[field] = BASE_FIELDS.includes(field)
-        ? String(raw).trim()
-        : (raw === null || raw === undefined ? '' : String(raw));
-    }
-
-    const event = await Event.create(doc);
+    const event = await Event.create({
+      name: name.trim(),
+      date,
+      location: location.trim(),
+      teamLeader: teamLeader || '',
+      offsiteSupport: offsiteSupport || '',
+      categories: categories || '',
+      gunstart: gunstart || '',
+      callTime: callTime || '',
+      maxRunners: maxRunners || '',
+      meals: meals || '',
+      roleCapacities: buildDefaultCapacities(roleCounts),
+      assignments: {},
+      status: 'active',
+    });
 
     res.status(201).json({ event: event.toCard() });
   } catch (err) {
@@ -272,74 +229,22 @@ router.put('/marshals/:id/rating', async (req, res) => {
 // PUT /api/admin/events/:id -- edit event details / logistics (always editable)
 router.put('/events/:id', async (req, res) => {
   try {
-    // Load first: which fields are editable depends on the event's own type.
-    // `eventType` itself is deliberately not editable here -- see the /type
-    // route below.
-    const event = await Event.findById(req.params.id);
+    const editableFields = [
+      'name', 'date', 'location', 'teamLeader', 'offsiteSupport', 'categories',
+      'gunstart', 'callTime', 'maxRunners', 'meals', 'transpo', 'driver', 'driverNumber', 'rate',
+    ];
+    const update = {};
+    for (const field of editableFields) {
+      if (Object.prototype.hasOwnProperty.call(req.body, field)) {
+        update[field] = req.body[field];
+      }
+    }
+    const event = await Event.findByIdAndUpdate(req.params.id, update, { new: true });
     if (!event) return res.status(404).json({ error: 'Event not found' });
-
-    const editableFields = fieldsFor(event.eventType);
-    const rejected = [];
-    for (const field of Object.keys(req.body)) {
-      if (field === 'eventType') continue;
-      if (!editableFields.includes(field)) { rejected.push(field); continue; }
-      event[field] = req.body[field];
-    }
-    if (rejected.length) {
-      return res.status(400).json({
-        error: `${rejected.join(', ')} ${rejected.length === 1 ? 'is not a field' : 'are not fields'} on ${event.eventType || 'Untyped'} events`,
-      });
-    }
-
-    await event.save();
     res.json({ event: event.toCard() });
   } catch (err) {
     console.error('Update event error:', err);
     res.status(500).json({ error: 'Could not update event.' });
-  }
-});
-
-// POST /api/admin/events/:id/type -- set the type on an UNTYPED event
-//
-// One-way: this fills in the type an event predating the type system never
-// had. Re-typing an event that already has one is refused, because the type
-// decides which roles exist and silently swapping it under a lineup that is
-// already built is a good way to lose people.
-//
-// Roles already assigned outside the new type are NOT touched. They come back
-// from toCard() as `extraRoles` and stay visible on the card, in the
-// announcement and in the PDF; they just can't be added to.
-router.post('/events/:id/type', async (req, res) => {
-  try {
-    const { eventType } = req.body;
-    if (!isEventType(eventType)) {
-      return res.status(400).json({
-        error: `Unknown event type "${eventType}". Choose one of: ${EVENT_TYPE_NAMES.join(', ')}`,
-      });
-    }
-
-    const event = await Event.findById(req.params.id);
-    if (!event) return res.status(404).json({ error: 'Event not found' });
-    if (event.eventType) {
-      return res.status(409).json({
-        error: `This event is already a ${event.eventType} event. The type can only be set on an untyped event, since it decides which roles the event has.`,
-      });
-    }
-
-    event.eventType = eventType;
-
-    // Give the new type's roles a capacity entry so they render as 0-slot
-    // rows ready to be adjusted, without disturbing anything already stored.
-    if (!event.roleCapacities) event.roleCapacities = new Map();
-    for (const role of rolesFor(eventType)) {
-      if (!event.roleCapacities.has(role)) event.roleCapacities.set(role, 0);
-    }
-
-    await event.save();
-    res.json({ event: event.toCard() });
-  } catch (err) {
-    console.error('Set event type error:', err);
-    res.status(500).json({ error: 'Could not set the event type.' });
   }
 });
 
@@ -352,13 +257,6 @@ router.post('/events/:id/capacity', async (req, res) => {
 
     const event = await Event.findById(req.params.id);
     if (!event) return res.status(404).json({ error: 'Event not found' });
-
-    // Strict: only the event type's own roles can be given slots. A role
-    // holding leftover data from before the type was set can be emptied
-    // (unassign) but never grown.
-    if (!allowedRoles(event).includes(role)) {
-      return res.status(400).json({ error: unknownRoleError(role, event) });
-    }
 
     const currentFilled = ((event.assignments && event.assignments.get(role)) || []).length;
     if (cap < currentFilled) {
@@ -394,9 +292,6 @@ router.post('/events/:id/assign', async (req, res) => {
     const event = await Event.findById(req.params.id);
     if (!event) return res.status(404).json({ error: 'Event not found' });
     if (event.status !== 'active') return res.status(400).json({ error: 'Event is not active' });
-    if (!allowedRoles(event).includes(role)) {
-      return res.status(400).json({ error: unknownRoleError(role, event) });
-    }
 
     const currentList = (event.assignments && event.assignments.get(role)) || [];
     const capacity = (event.roleCapacities && event.roleCapacities.get(role)) || 0;
@@ -467,11 +362,6 @@ router.post('/events/:id/assign', async (req, res) => {
 });
 
 // POST /api/admin/events/:id/note -- edit the note shown next to an assigned marshal (e.g. "5KM")
-//
-// Checked against the master role list rather than the event type's, unlike
-// capacity/assign. Editing and removing must keep working on a role holding
-// leftover people from before the event was typed -- you can always take
-// someone out of a slot, you just can't put anyone new in one.
 router.post('/events/:id/note', async (req, res) => {
   try {
     const { role, marshalId, employeeId, note } = req.body;
@@ -584,10 +474,7 @@ router.get('/events/:id/pdf', async (req, res) => {
     if (!event) return res.status(404).json({ error: 'Event not found' });
 
     const card = event.toCard();
-    // Only the roles this event actually has -- its type's, plus any leftover
-    // role still holding people. Passing all eleven would be harmless (the
-    // renderer skips empty roles) but this keeps the contract honest.
-    const buffer = await renderToBuffer(card, [...card.typeRoles, ...card.extraRoles]);
+    const buffer = await renderToBuffer(card, ALL_ROLES);
     const name = fileNameFor(card);
     // Quote for the spaces, and add the RFC 5987 form so a non-ASCII event
     // name survives; the plain filename is stripped to ASCII as a fallback.

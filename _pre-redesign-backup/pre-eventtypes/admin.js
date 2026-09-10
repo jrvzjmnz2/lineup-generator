@@ -5,14 +5,9 @@
   document.getElementById('welcomeText').textContent = `${user.firstName} ${user.lastName}`;
   document.getElementById('logoutBtn').addEventListener('click', () => Auth.logout());
 
-  // The master role list, mirrored from server/config/roles.js (append, never
-  // insert -- saved events key their capacities/assignments by role name).
-  //
-  // WHICH of these a given event offers is decided by its event type and comes
-  // down per event on `typeRoles` / `extraRoles`, so this list is only used
-  // where every role has to be swept regardless of type: scanning assignments
-  // to find who is already placed.
-  const ALL_ROLES = [
+  // Keep in sync with server/config/roles.js (append, never insert -- saved
+  // events key their capacities/assignments by role name).
+  const ROLES_WITH_CAPACITY = [
     'Operator',
     'Spotter',
     'Split',
@@ -22,9 +17,10 @@
     'Kit Claiming Staff',
     'Registration Staff',
     'Fulfillment',
-    'Onsite Support',
-    'Walk-ins',
   ];
+  const ALL_ROLES = [...ROLES_WITH_CAPACITY];
+
+  const roleCounts = Object.fromEntries(ROLES_WITH_CAPACITY.map((r) => [r, 0]));
 
   // ---------------- Tabs ----------------
   const tabButtons = document.querySelectorAll('.tab-btn');
@@ -41,216 +37,82 @@
   });
 
   // ---------------- Generate Event ----------------
-  //
-  // The form is built from the event type the admin picks, not hardcoded.
-  // Each type has its own entries and its own roles (server/config/eventTypes.js),
-  // so a Fulfillment event never shows a Gun Start box and a Kit Claiming
-  // event never offers a Spotter slot. The catalogue is fetched from
-  // /admin/event-types rather than mirrored here -- a second copy of a 5x2
-  // table of fields and roles would drift.
-
-  // How each field renders. The keys are the field names the server uses; the
-  // ids stay `gen<Field>` so #genDate (and its weekend hint) keep working.
-  const FIELD_DEFS = {
-    name: { label: 'Event Name', required: true },
-    date: { label: 'Date', required: true, type: 'date', span: 1 },
-    location: { label: 'Location', required: true, span: 2 },
-    teamLeader: { label: 'Team Leader', placeholder: 'e.g. Brett / Jordan / Joshua' },
-    offsiteSupport: { label: 'Offsite Support' },
-    categories: { label: 'Categories', placeholder: 'e.g. 42KM|21KM|10KM|5KM' },
-    lanes: { label: 'Number of Lanes', placeholder: 'e.g. 6' },
-    gunstart: { label: 'Gun Start — optional', placeholder: 'e.g. 0100AM|0400AM|0430AM|0500AM' },
-    callTime: { label: 'Call Time', placeholder: 'e.g. 8:00 PM (Saturday) 8/08/2026' },
-    maxRunners: { label: 'Max Runners', placeholder: 'e.g. 5,640' },
-    meals: { label: 'Meals', placeholder: 'e.g. 2 Meals' },
-    transpo: { label: 'Transportation' },
-    driver: { label: 'Driver' },
-    driverNumber: { label: 'Contact Number' },
-    rate: { label: 'Rate' },
-  };
-
-  const genTypeSelect = document.getElementById('genEventType');
-  const genFieldGrid = document.getElementById('genFieldGrid');
   const roleCounterGrid = document.getElementById('roleCounterGrid');
-  const generateForm = document.getElementById('generateForm');
-  const generateAlertBox = document.getElementById('generateAlertBox');
-
-  let eventTypes = [];            // [{ name, fields, roles, hasLogistics }]
-  let logisticsFields = [];       // filled in only from the event card, never here
-  let roleCounts = {};            // role -> slots, for the type currently selected
-
-  function typeByName(name) {
-    return eventTypes.find((t) => t.name === name) || null;
-  }
-
-  // Fields the CREATE form asks for. Logistics (transport / driver / rate) are
-  // deliberately excluded even on Timing: they get filled in on the event card
-  // once the lineup exists, which is how it worked before types and is still
-  // how the team uses it.
-  function formFieldsFor(typeName) {
-    const t = typeByName(typeName);
-    if (!t) return [];
-    return t.fields.filter((f) => !logisticsFields.includes(f));
-  }
-
-  async function loadEventTypes() {
-    try {
-      const data = await apiRequest('/admin/event-types');
-      eventTypes = data.types || [];
-      logisticsFields = data.logisticsFields || [];
-      genTypeSelect.innerHTML = '<option value="">Select an event type…</option>';
-      eventTypes.forEach((t) => {
-        const opt = document.createElement('option');
-        opt.value = t.name;
-        opt.textContent = t.name;
-        genTypeSelect.appendChild(opt);
-      });
-    } catch (err) {
-      generateAlertBox.innerHTML = `<div class="alert alert-error">Could not load the event types: ${escapeHtml(err.message)}</div>`;
-    }
-  }
-
-  function buildGenField(field) {
-    const def = FIELD_DEFS[field] || { label: field };
-    const wrap = document.createElement('div');
-    wrap.className = 'field' + (def.span === 2 ? ' span-2' : '');
-    wrap.dataset.field = field;
-
-    const id = `gen${field.charAt(0).toUpperCase()}${field.slice(1)}`;
-    const label = document.createElement('label');
-    label.setAttribute('for', id);
-    label.textContent = def.label;
-    wrap.appendChild(label);
-
-    const input = document.createElement('input');
-    input.type = def.type || 'text';
-    input.id = id;
-    input.dataset.genField = field;
-    if (def.required) input.required = true;
-    if (def.placeholder) input.placeholder = def.placeholder;
-    wrap.appendChild(input);
-
-    // The date field carries the weekday/weekend hint. It is rebuilt with the
-    // field, so the hint element and its listeners are wired here rather than
-    // once at page load.
-    if (field === 'date') {
-      const hint = document.createElement('p');
-      hint.className = 'field-hint';
-      hint.id = 'genDateHint';
-      wrap.appendChild(hint);
-      wireDateHint(input, hint);
-    }
-    return wrap;
-  }
+  ROLES_WITH_CAPACITY.forEach((role) => {
+    const div = document.createElement('div');
+    div.className = 'role-counter';
+    div.innerHTML = `
+      <span class="role-name">${role}</span>
+      <div class="counter-controls">
+        <button type="button" data-action="dec" data-role="${role}">−</button>
+        <span class="counter-value" id="count_${slug(role)}">0</span>
+        <button type="button" data-action="inc" data-role="${role}">+</button>
+      </div>`;
+    roleCounterGrid.appendChild(div);
+  });
 
   // Tell the admin which rule the event they are creating will fall under,
   // as soon as they pick a date.
-  function wireDateHint(input, hint) {
+  const genDateInput = document.getElementById('genDate');
+  const genDateHint = document.getElementById('genDateHint');
+  if (genDateInput && genDateHint) {
     const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const paint = () => {
-      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(input.value || '');
-      if (!m) { hint.textContent = ''; hint.className = 'field-hint'; return; }
+    const paintDateHint = () => {
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(genDateInput.value || '');
+      if (!m) { genDateHint.textContent = ''; genDateHint.className = 'field-hint'; return; }
       // Built from the parts via Date.UTC for the same reason the server does:
       // parsing the string directly would shift the day in a non-UTC zone.
       const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
       const day = d.getUTCDay();
       const weekend = day === 0 || day === 6;
-      hint.textContent = weekend
+      genDateHint.textContent = weekend
         ? `${DAY_NAMES[day]} — weekend event: each marshal can hold only one weekend event.`
         : `${DAY_NAMES[day]} — weekday event: marshals can be lined up on several of these.`;
-      hint.className = 'field-hint' + (weekend ? ' field-hint-weekend' : '');
+      genDateHint.className = 'field-hint' + (weekend ? ' field-hint-weekend' : '');
     };
-    input.addEventListener('change', paint);
-    input.addEventListener('input', paint);
-    paint();
+    genDateInput.addEventListener('change', paintDateHint);
+    genDateInput.addEventListener('input', paintDateHint);
+    paintDateHint();
   }
-
-  /**
-   * Rebuild the entries and the role counters for the selected type.
-   *
-   * Values already typed into fields the new type also has are carried over --
-   * switching from Timing to Kit Claiming after typing the name and date
-   * shouldn't make you type them again. Slot counts reset, since the roles
-   * themselves are different.
-   */
-  function renderGenerateForm() {
-    const typeName = genTypeSelect.value;
-    const keep = {};
-    genFieldGrid.querySelectorAll('[data-gen-field]').forEach((el) => { keep[el.dataset.genField] = el.value; });
-
-    genFieldGrid.innerHTML = '';
-    roleCounterGrid.innerHTML = '';
-    roleCounts = {};
-
-    const t = typeByName(typeName);
-    if (!t) {
-      genFieldGrid.innerHTML = '<p class="pool-empty" data-placeholder>Choose an event type to see its entries.</p>';
-      roleCounterGrid.innerHTML = '<p class="pool-empty" data-placeholder>Choose an event type to see its roles.</p>';
-      return;
-    }
-
-    formFieldsFor(typeName).forEach((field) => {
-      const el = buildGenField(field);
-      const input = el.querySelector('[data-gen-field]');
-      if (keep[field] !== undefined) {
-        input.value = keep[field];
-        if (field === 'date') input.dispatchEvent(new Event('input'));
-      }
-      genFieldGrid.appendChild(el);
-    });
-
-    t.roles.forEach((role) => {
-      roleCounts[role] = 0;
-      const div = document.createElement('div');
-      div.className = 'role-counter';
-      div.innerHTML = `
-        <span class="role-name">${escapeHtml(role)}</span>
-        <div class="counter-controls">
-          <button type="button" data-action="dec" data-role="${escapeHtml(role)}">−</button>
-          <span class="counter-value" id="count_${slug(role)}">0</span>
-          <button type="button" data-action="inc" data-role="${escapeHtml(role)}">+</button>
-        </div>`;
-      roleCounterGrid.appendChild(div);
-    });
-  }
-
-  genTypeSelect.addEventListener('change', renderGenerateForm);
 
   roleCounterGrid.addEventListener('click', (e) => {
     const btn = e.target.closest('button[data-action]');
     if (!btn) return;
     const role = btn.dataset.role;
-    if (!(role in roleCounts)) return;
     const delta = btn.dataset.action === 'inc' ? 1 : -1;
     roleCounts[role] = Math.max(0, roleCounts[role] + delta);
     document.getElementById(`count_${slug(role)}`).textContent = roleCounts[role];
   });
 
+  const generateForm = document.getElementById('generateForm');
+  const generateAlertBox = document.getElementById('generateAlertBox');
+
   generateForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     generateAlertBox.innerHTML = '';
-
-    const eventType = genTypeSelect.value;
-    if (!eventType) {
-      generateAlertBox.innerHTML = '<div class="alert alert-error">Choose an event type first.</div>';
-      return;
-    }
-
-    // Only the fields this type has are sent -- the server drops anything else
-    // anyway, but there is nothing else on screen to send.
-    const payload = { eventType, roleCounts };
-    genFieldGrid.querySelectorAll('[data-gen-field]').forEach((el) => {
-      payload[el.dataset.genField] = el.value.trim();
-    });
-
+    const payload = {
+      name: val('genName'),
+      date: val('genDate'),
+      location: val('genLocation'),
+      teamLeader: val('genTeamLeader'),
+      offsiteSupport: val('genOffsiteSupport'),
+      categories: val('genCategories'),
+      gunstart: val('genGunstart'),
+      callTime: val('genCallTime'),
+      maxRunners: val('genMaxRunners'),
+      meals: val('genMeals'),
+      roleCounts,
+    };
     try {
       await apiRequest('/admin/events', { method: 'POST', body: payload });
-      showToast(`${eventType} event added — it now appears in Create List and the marshal sign-up form.`, 'success');
+      showToast('Event added — it now appears in Create List and the marshal sign-up form.', 'success');
       generateForm.reset();
-      genTypeSelect.value = '';
-      renderGenerateForm();
+      ROLES_WITH_CAPACITY.forEach((role) => {
+        roleCounts[role] = 0;
+        document.getElementById(`count_${slug(role)}`).textContent = 0;
+      });
     } catch (err) {
-      generateAlertBox.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
+      generateAlertBox.innerHTML = `<div class="alert alert-error">${err.message}</div>`;
     }
   });
 
@@ -361,80 +223,6 @@
     });
   }
 
-  // Labels for the event-card detail rows, keyed by the field names the server
-  // uses. Which of these a card shows comes from `ev.typeFields`.
-  const CARD_FIELD_LABELS = {
-    teamLeader: 'Team Lead',
-    offsiteSupport: 'Off Site Support',
-    categories: 'Categories',
-    lanes: 'No. of Lanes',
-    gunstart: 'Gun Start',
-    callTime: 'Call Time',
-    maxRunners: 'Max No. Runners',
-    meals: 'Meals',
-    transpo: 'Transportation',
-    driver: 'Driver',
-    driverNumber: 'Contact Number',
-    rate: 'Rate',
-  };
-  // Shown in the card head, not as detail rows.
-  const CARD_BASE_FIELDS = ['name', 'date', 'location'];
-  // Shown in their own block at the bottom, Timing events only.
-  const CARD_LOGISTICS_FIELDS = ['transpo', 'driver', 'driverNumber', 'rate'];
-
-  // One-time type picker for an event saved before event types existed.
-  //
-  // Setting a type is one-way (the server refuses to re-type a typed event):
-  // the type decides which roles an event has, and swapping it under a lineup
-  // that is already built is how people get lost.
-  function buildTypePicker(ev) {
-    const wrap = document.createElement('div');
-    wrap.className = 'type-picker';
-
-    const text = document.createElement('p');
-    text.className = 'type-picker-note';
-    text.textContent = 'This event was created before event types. Set its type to narrow it to the right entries and roles — anyone already lined up stays where they are.';
-    wrap.appendChild(text);
-
-    const row = document.createElement('div');
-    row.className = 'type-picker-row';
-
-    const select = document.createElement('select');
-    select.setAttribute('aria-label', `Set the event type for ${ev.name}`);
-    select.innerHTML = '<option value="">Set event type…</option>';
-    eventTypes.forEach((t) => {
-      const opt = document.createElement('option');
-      opt.value = t.name;
-      opt.textContent = t.name;
-      select.appendChild(opt);
-    });
-    row.appendChild(select);
-
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'btn-secondary btn-small';
-    btn.textContent = 'Set type';
-    btn.addEventListener('click', () => {
-      if (!select.value) return showToast('Pick a type first.', 'error');
-      if (!window.confirm(`Set "${ev.name}" to ${select.value}? This cannot be changed afterwards.`)) return;
-      setEventType(ev._id, select.value);
-    });
-    row.appendChild(btn);
-
-    wrap.appendChild(row);
-    return wrap;
-  }
-
-  async function setEventType(eventId, eventType) {
-    try {
-      const { event } = await apiRequest(`/admin/events/${eventId}/type`, { method: 'POST', body: { eventType } });
-      replaceLocalEvent(event);
-      showToast(`Set to ${eventType}.`, 'success');
-    } catch (err) {
-      showToast(err.message, 'error');
-    }
-  }
-
   function buildEventCard(ev, { editable }) {
     const card = document.createElement('div');
     card.className = 'event-card';
@@ -442,73 +230,49 @@
 
     const head = document.createElement('div');
     head.className = 'card-head';
-    // Two tags, both read at a glance:
-    //   type     -- which kind of operation this is, and so which entries and
-    //               roles it has at all
-    //   schedule -- which lineup rule applies (weekend cards allow one event
-    //               per marshal, weekday cards don't restrict)
+    // The schedule tag tells the admin at a glance which rule this card is
+    // under: weekend cards allow one event per marshal, weekday cards do not
+    // restrict at all.
     const tagClass = ev.isWeekend ? 'schedule-tag weekend' : 'schedule-tag weekday';
     const tagText = ev.isWeekend ? 'Weekend' : 'Weekday';
     const tagTitle = ev.isWeekend
       ? 'Weekend event — a marshal can only hold one weekend event at a time'
       : 'Weekday event — marshals can be lined up on as many as you need';
-
-    const typed = Boolean(ev.eventType);
-    const typeTag = typed
-      ? `<span class="type-tag" title="${escapeHtml(ev.eventType)} event — its entries and roles come from this type">${escapeHtml(ev.eventType)}</span>`
-      : `<span class="type-tag untyped" title="Saved before event types existed, so it still shows every entry and every role. Set a type below to fix that.">Untyped</span>`;
-
     const dayLabel = ev.dayName ? `${escapeHtml(ev.dayName)}, ` : '';
     head.innerHTML =
       `<div class="card-head-top"><h3>${escapeHtml(ev.name)}</h3>` +
-      `<span class="card-head-tags">${typeTag}` +
-      `<span class="${tagClass}" title="${tagTitle}">${tagText}</span></span></div>` +
+      `<span class="${tagClass}" title="${tagTitle}">${tagText}</span></div>` +
       `<div class="meta">${dayLabel}${formatDate(ev.date)} &nbsp;•&nbsp; ${escapeHtml(ev.location)}</div>`;
     card.appendChild(head);
-
-    // Untyped events get a one-time picker. Setting the type narrows the card
-    // to that type's entries and roles; anyone already lined up in a role the
-    // new type doesn't have stays put and stays visible (see extraRoles).
-    if (!typed && editable) card.appendChild(buildTypePicker(ev));
 
     const body = document.createElement('div');
     body.className = 'card-body';
 
-    // Editable detail fields -- exactly the ones this event's type carries.
-    // `typeFields` is derived server-side from the type, so the card can never
-    // show an entry the type doesn't have or hide one it does.
-    const detailFields = (ev.typeFields || []).filter(
-      (f) => !CARD_BASE_FIELDS.includes(f) && !CARD_LOGISTICS_FIELDS.includes(f)
-    );
-    if (detailFields.length) {
-      const detailGrid = document.createElement('div');
-      detailGrid.className = 'detail-grid';
-      detailFields.forEach((field) => {
-        // Gun Start stays hidden on a completed card when it was never filled.
-        if (field === 'gunstart' && !editable && !ev.gunstart) return;
-        detailGrid.appendChild(detailRow(CARD_FIELD_LABELS[field] || field, field, ev, editable));
-      });
-      body.appendChild(detailGrid);
-    }
+    // Editable detail fields
+    const detailGrid = document.createElement('div');
+    detailGrid.className = 'detail-grid';
+    detailGrid.appendChild(detailRow('Team Lead', 'teamLeader', ev, editable));
+    detailGrid.appendChild(detailRow('Off Site Support', 'offsiteSupport', ev, editable));
+    detailGrid.appendChild(detailRow('Categories', 'categories', ev, editable));
+    if (editable || ev.gunstart) detailGrid.appendChild(detailRow('Gun Start', 'gunstart', ev, editable));
+    detailGrid.appendChild(detailRow('Call Time', 'callTime', ev, editable));
+    detailGrid.appendChild(detailRow('Max No. Runners', 'maxRunners', ev, editable));
+    detailGrid.appendChild(detailRow('Meals', 'meals', ev, editable));
+    body.appendChild(detailGrid);
 
-    // Role blocks: this type's roles, then any role still holding people from
-    // before the event was typed (marked, and not growable -- see the server).
-    (ev.typeRoles || []).forEach((role) => {
+    // Role blocks
+    ALL_ROLES.forEach((role) => {
       body.appendChild(buildRoleBlock(ev, role, editable));
     });
-    (ev.extraRoles || []).forEach((role) => {
-      body.appendChild(buildRoleBlock(ev, role, editable, { extra: true }));
-    });
 
-    // Logistics -- Timing events only (and untyped ones, which may hold it).
-    if (ev.hasLogistics) {
-      const logisticsWrap = document.createElement('div');
-      logisticsWrap.className = 'logistics-grid';
-      CARD_LOGISTICS_FIELDS.forEach((field) => {
-        logisticsWrap.appendChild(logisticsField(CARD_FIELD_LABELS[field] || field, field, ev, editable));
-      });
-      body.appendChild(logisticsWrap);
-    }
+    // Logistics
+    const logisticsWrap = document.createElement('div');
+    logisticsWrap.className = 'logistics-grid';
+    logisticsWrap.appendChild(logisticsField('Transportation', 'transpo', ev, editable));
+    logisticsWrap.appendChild(logisticsField('Driver', 'driver', ev, editable));
+    logisticsWrap.appendChild(logisticsField('Contact Number', 'driverNumber', ev, editable));
+    logisticsWrap.appendChild(logisticsField('Rate', 'rate', ev, editable));
+    body.appendChild(logisticsWrap);
 
     card.appendChild(body);
 
@@ -595,33 +359,26 @@
     return wrap;
   }
 
-  function buildRoleBlock(ev, role, editable, { extra = false } = {}) {
+  function buildRoleBlock(ev, role, editable) {
     const capacity = ev.roleCapacities[role] || 0;
     const assigned = ev.assignments[role] || [];
 
     const block = document.createElement('div');
-    block.className = 'role-block' + (extra ? ' role-block-extra' : '');
+    block.className = 'role-block';
 
     const title = document.createElement('div');
     title.className = 'role-title';
-    // An `extra` role is one holding people from before this event was typed.
-    // It shows so nobody silently disappears from the card, the announcement
-    // or the PDF, but it gets no +/- : the server refuses to grow a role the
-    // type doesn't have. Removing people from it still works.
-    const capacityControls = editable && !extra
+    const capacityControls = editable
       ? `<span class="cap-controls">
            <button type="button" class="cap-btn" data-cap-action="dec" aria-label="Remove a slot">−</button>
            <span class="cap-count">${assigned.length}/${capacity}</span>
            <button type="button" class="cap-btn" data-cap-action="inc" aria-label="Add a slot">+</button>
          </span>`
       : `<span>${assigned.length}/${capacity}</span>`;
-    const extraNote = extra
-      ? `<span class="role-extra-flag" title="Not a role on ${escapeHtml(ev.eventType || 'this')} events. Left here because people are still assigned to it — you can remove them, but not add more.">off-type</span>`
-      : '';
-    title.innerHTML = `<span>${escapeHtml(role)}</span>${extraNote}${capacityControls}`;
+    title.innerHTML = `<span>${role}</span>${capacityControls}`;
     block.appendChild(title);
 
-    if (editable && !extra) {
+    if (editable) {
       title.querySelector('[data-cap-action="inc"]').addEventListener('click', () => adjustCapacity(ev._id, role, capacity + 1));
       title.querySelector('[data-cap-action="dec"]').addEventListener('click', () => adjustCapacity(ev._id, role, capacity - 1));
     }
@@ -634,7 +391,7 @@
     if (assigned.length === 0) {
       const hint = document.createElement('div');
       hint.className = 'slot-empty-hint';
-      hint.textContent = extra ? 'Empty — this role is not part of this event type' : (editable ? 'Drag a marshal or employee here' : 'Unfilled');
+      hint.textContent = editable ? 'Drag a marshal or employee here' : 'Unfilled';
       slot.appendChild(hint);
     } else {
       assigned.forEach((a) => {
@@ -693,9 +450,7 @@
       });
     }
 
-    // No drop target on an off-type role: the server would refuse the assign,
-    // so don't offer the gesture in the first place.
-    if (editable && !extra) {
+    if (editable) {
       slot.addEventListener('dragover', (e) => {
         e.preventDefault();
         if (assigned.length < capacity) slot.classList.add('dragover');
@@ -714,20 +469,6 @@
 
     block.appendChild(slot);
     return block;
-  }
-
-  // What this marshal said they'd do at an event of THIS type.
-  //
-  // Sign-ups are per type now (the types have disjoint role sets), so the flat
-  // `roles` union is the wrong thing to show against a specific event -- it
-  // would offer "Spotter" on a Kit Claiming card. Submissions made before
-  // rolesByType existed only have the flat list, so that is the fallback.
-  function preferredRolesFor(m, ev) {
-    const key = ev.eventType || 'Other';
-    const byType = m.rolesByType || null;
-    if (byType && Array.isArray(byType[key])) return byType[key];
-    if (byType && Object.keys(byType).length) return []; // typed submission, nothing for this type
-    return m.roles || [];
   }
 
   // Builds the small, always-visible card that sits beside the main event
@@ -788,13 +529,9 @@
           const when = assignedElsewhere.dayName ? ` (${assignedElsewhere.dayName})` : '';
           chip.title = `Already on ${assignedElsewhere.role} for "${assignedElsewhere.eventName}"${when}. Weekend events allow one event per marshal.`;
         } else {
-          // The roles this marshal picked FOR THIS EVENT'S TYPE. The flat
-          // `roles` union would list roles that don't exist on this event.
-          const prefer = preferredRolesFor(m, ev);
-          const preferText = prefer.length ? prefer.join(', ') : 'none picked for this event type';
           chip.title = isExempt
-            ? `Exempt this cycle -- can be lined up on multiple events. Preferred roles: ${preferText}`
-            : `Preferred roles: ${preferText}`;
+            ? `Exempt this cycle -- can be lined up on multiple events. Preferred roles: ${(m.roles || []).join(', ')}`
+            : `Preferred roles: ${(m.roles || []).join(', ')}`;
           const bg = ratingColor(m.rating);
           if (bg) {
             chip.style.background = bg;
@@ -1300,9 +1037,7 @@
     venue: '📍',
     teamLead: '👤',
     offsite: '🤝',
-    type: '🏷',
     categories: '🏁',
-    lanes: '🛣',
     gunstart: '🔔',
     callTime: '⏰',
     maxRunners: '👥',
@@ -1352,9 +1087,6 @@
 
     // ---- Headline ----
     const head = [`${I.title}  ${cleanValue(ev.name).toUpperCase()}`];
-    // Which kind of operation this is. Sits under the name so whoever reads
-    // the post in a group chat knows what they are being called to.
-    if (ev.eventType) head.push(`${I.type}  ${cleanValue(ev.eventType)}`);
     const when = announcementDate(ev);
     if (when) head.push(`${I.date}  ${when}`);
     const venue = cleanValue(ev.location);
@@ -1362,43 +1094,25 @@
     blocks.push(head.join('\n'));
 
     // ---- Event details ----
-    //
-    // Gated on the event's own field list, not just on "is it blank".
-    // Blank-dropping alone is not enough: an event that was retyped can still
-    // hold a value in a field its type doesn't have, and the post would then
-    // announce a Max Runners count that the event's own card doesn't show.
-    // `typeFields` is absent on an older payload or a test fixture, in which
-    // case every field is allowed through and blank-dropping decides.
-    const owns = (field) => !ev.typeFields || ev.typeFields.includes(field);
-
     const details = [
-      ['teamLeader', I.teamLead, 'Team Lead', ev.teamLeader],
-      ['offsiteSupport', I.offsite, 'Off Site Support', ev.offsiteSupport],
-      ['categories', I.categories, 'Categories', spaceSeparators(ev.categories)],
-      ['lanes', I.lanes, 'No. of Lanes', ev.lanes],
-      ['gunstart', I.gunstart, 'Gun Start', spaceSeparators(ev.gunstart)],
-      ['callTime', I.callTime, 'Call Time', ev.callTime],
-      ['maxRunners', I.maxRunners, 'Max Runners', ev.maxRunners],
-      ['meals', I.meals, 'Meals', ev.meals],
+      [I.teamLead, 'Team Lead', ev.teamLeader],
+      [I.offsite, 'Off Site Support', ev.offsiteSupport],
+      [I.categories, 'Categories', spaceSeparators(ev.categories)],
+      [I.gunstart, 'Gun Start', spaceSeparators(ev.gunstart)],
+      [I.callTime, 'Call Time', ev.callTime],
+      [I.maxRunners, 'Max Runners', ev.maxRunners],
+      [I.meals, 'Meals', ev.meals],
     ]
-      .filter(([field, , , value]) => owns(field) && cleanValue(value) !== '')
-      .map(([, icon, label, value]) => `${icon}  ${label}: ${cleanValue(value)}`);
+      .filter(([, , value]) => cleanValue(value) !== '')
+      .map(([icon, label, value]) => `${icon}  ${label}: ${cleanValue(value)}`);
 
     if (details.length) {
       blocks.push([`${I.details}  EVENT DETAILS`, ANNOUNCE_RULE, '', ...details].join('\n'));
     }
 
     // ---- Marshal lineup ----
-    // This event's own roles, in the type's order, then any off-type role
-    // still holding people (from before the event was typed) so nobody is
-    // left off the post. Falls back to the master list for a fixture or an
-    // older payload with no type info.
-    const lineupRoles = (ev.typeRoles && ev.typeRoles.length) || (ev.extraRoles && ev.extraRoles.length)
-      ? [...(ev.typeRoles || []), ...(ev.extraRoles || [])]
-      : ALL_ROLES;
-
     const lineup = [];
-    lineupRoles.forEach((role) => {
+    ALL_ROLES.forEach((role) => {
       const assigned = ev.assignments[role] || [];
       if (assigned.length === 0) return; // unfilled roles stay out of the post
       if (lineup.length) lineup.push('');
@@ -1416,15 +1130,15 @@
       blocks.push([`${I.lineup}  MARSHAL LINEUP`, ANNOUNCE_RULE, '', ...lineup].join('\n'));
     }
 
-    // ---- Logistics ---- (Timing events only, same gate as the card)
+    // ---- Logistics ----
     const logistics = [
-      ['transpo', I.transpo, 'Transportation', ev.transpo],
-      ['driver', I.driver, 'Driver', ev.driver],
-      ['driverNumber', I.contact, 'Contact', ev.driverNumber],
-      ['rate', I.rate, 'Rate', ev.rate],
+      [I.transpo, 'Transportation', ev.transpo],
+      [I.driver, 'Driver', ev.driver],
+      [I.contact, 'Contact', ev.driverNumber],
+      [I.rate, 'Rate', ev.rate],
     ]
-      .filter(([field, , , value]) => owns(field) && cleanValue(value) !== '')
-      .map(([, icon, label, value]) => `${icon}  ${label}: ${cleanValue(value)}`);
+      .filter(([, , value]) => cleanValue(value) !== '')
+      .map(([icon, label, value]) => `${icon}  ${label}: ${cleanValue(value)}`);
 
     if (logistics.length) {
       blocks.push([`${I.logistics}  LOGISTICS`, ANNOUNCE_RULE, '', ...logistics].join('\n'));
@@ -1489,11 +1203,6 @@
     if (marshalListData.length) renderMarshalList();
   });
 
-  // Initial load. The type catalogue comes first: the Generate Event tab is
-  // the one showing on arrival and it cannot build its form without it.
-  (async () => {
-    await loadEventTypes();
-    renderGenerateForm();
-    loadCreateList();
-  })();
+  // Initial load
+  loadCreateList();
 })();

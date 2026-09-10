@@ -27,11 +27,10 @@
     <p class="eyebrow">Sign-up</p>
     <h1>Sign up for events</h1>
     <p class="lede">
-      Events are grouped by the kind of work they are, and each kind has its own roles.
-      Under every group you're interested in, tick the events you're available for and the
-      roles you'd take at that kind of event. Submitting again replaces your previous
-      selection. You can also submit with nothing ticked to be removed from consideration
-      for everything — that also pulls you out of any event you've already been placed on.
+      Select every event you're available for and every role you're willing to fill.
+      Submitting again replaces your previous selection. You can also submit with no events
+      selected to be removed from consideration for everything — that also pulls you out of
+      any event you've already been placed on.
     </p>
     <div class="page-rule"></div>
   </div>
@@ -48,10 +47,13 @@
 
   <div class="card-panel">
     <form id="marshalForm">
-      <p class="form-section-title">Events &amp; Roles</p>
-      <div id="signupGroups">
+      <p class="form-section-title">Events</p>
+      <div id="eventsCheckboxGrid" class="checkbox-grid">
         <p class="pool-empty">Loading events…</p>
       </div>
+
+      <p class="form-section-title">Roles</p>
+      <div id="rolesCheckboxGrid" class="checkbox-grid"></div>
 
       <button type="submit" class="btn-primary btn-block">Submit</button>
     </form>

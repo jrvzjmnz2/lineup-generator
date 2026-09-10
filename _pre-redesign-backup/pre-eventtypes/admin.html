@@ -72,37 +72,72 @@
           <div class="panel-head-text">
             <p class="eyebrow">Section 01</p>
             <h1>Generate Event</h1>
-            <p class="lede">Pick the type of event, fill in the entries it needs, and set how many people each of its roles takes.</p>
+            <p class="lede">Create an event card and set how many marshals each role needs.</p>
           </div>
         </header>
 
         <div class="card-panel form-panel">
           <div id="generateAlertBox"></div>
           <form id="generateForm">
-            <div class="field field-lead">
-              <label for="genEventType">Event Type</label>
-              <select id="genEventType" required>
-                <option value="">Select an event type…</option>
-              </select>
-              <p class="field-hint" id="genTypeHint">
-                Each type has its own entries and its own roles — pick one and the form below fills in.
-              </p>
+            <p class="form-section-title">Event Details</p>
+            <div class="row-2">
+              <div class="field">
+                <label for="genName">Event Name</label>
+                <input type="text" id="genName" required />
+              </div>
+              <div class="field">
+                <label for="genDate">Date</label>
+                <input type="date" id="genDate" required />
+                <p class="field-hint" id="genDateHint"></p>
+              </div>
+            </div>
+            <div class="field">
+              <label for="genLocation">Location</label>
+              <input type="text" id="genLocation" required />
+            </div>
+            <div class="row-2">
+              <div class="field">
+                <label for="genTeamLeader">Team Leader</label>
+                <input type="text" id="genTeamLeader" placeholder="e.g. Brett / Jordan / Joshua" />
+              </div>
+              <div class="field">
+                <label for="genOffsiteSupport">Offsite Support</label>
+                <input type="text" id="genOffsiteSupport" />
+              </div>
             </div>
 
-            <p class="form-section-title">Event Details</p>
-            <div id="genFieldGrid" class="gen-field-grid">
-              <p class="pool-empty" data-placeholder>Choose an event type to see its entries.</p>
+            <p class="form-section-title">Race Information</p>
+            <div class="row-2">
+              <div class="field">
+                <label for="genCategories">Categories</label>
+                <input type="text" id="genCategories" placeholder="e.g. 42KM|21KM|10KM|5KM" />
+              </div>
+              <div class="field">
+                <label for="genGunstart">Gun Start — optional</label>
+                <input type="text" id="genGunstart" placeholder="e.g. 0100AM|0400AM|0430AM|0500AM" />
+              </div>
+            </div>
+            <div class="row-2">
+              <div class="field">
+                <label for="genCallTime">Call Time</label>
+                <input type="text" id="genCallTime" placeholder="e.g. 8:00 PM (Saturday) 8/08/2026" />
+              </div>
+              <div class="field">
+                <label for="genMaxRunners">Max Runners</label>
+                <input type="text" id="genMaxRunners" placeholder="e.g. 5,640" />
+              </div>
+            </div>
+            <div class="field">
+              <label for="genMeals">Meals</label>
+              <input type="text" id="genMeals" placeholder="e.g. 2 Meals" />
             </div>
 
             <p class="form-section-title">Role Slots</p>
             <p class="lede" style="margin-bottom: var(--sp-4);">
-              Set how many people are needed for each role at this event. Only the roles that
-              belong to the chosen event type are listed. You can adjust these counts later from
-              the event card in Create List.
+              Set how many marshals are needed for each role at this event. You can adjust
+              these counts later from the event card in Create List.
             </p>
-            <div id="roleCounterGrid" class="role-counter-grid">
-              <p class="pool-empty" data-placeholder>Choose an event type to see its roles.</p>
-            </div>
+            <div id="roleCounterGrid" class="role-counter-grid"></div>
 
             <button type="submit" class="btn-primary btn-block">Add Event</button>
           </form>
