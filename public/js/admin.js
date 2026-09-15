@@ -27,6 +27,69 @@
     'Bib Production',
   ];
 
+  // ---------------- Drag auto-scroll ----------------
+  //
+  // The Create List grid can run far taller than the viewport, but native
+  // HTML5 drag-and-drop does not reliably auto-scroll a plain window scroll
+  // container the way it scrolls a textarea or a single scrollable div --
+  // dragging a marshal/employee chip toward the top or bottom edge of the
+  // screen just leaves the pointer pinned there with no way to reach a role
+  // slot further up or down the page. This makes the page itself scroll
+  // while a drag from this app is in progress and the pointer is near an
+  // edge, so long lists stay reachable mid-drag.
+  (function setupDragAutoScroll() {
+    const EDGE = 90; // px from the viewport edge where scrolling kicks in
+    const MAX_SPEED = 22; // px scrolled per animation frame right at the edge
+    let speed = 0;
+    let rafId = null;
+
+    function tick() {
+      if (!speed) {
+        rafId = null;
+        return;
+      }
+      window.scrollBy(0, speed);
+      rafId = requestAnimationFrame(tick);
+    }
+
+    function updateSpeed(clientY) {
+      const vh = window.innerHeight;
+      let next = 0;
+      if (clientY < EDGE) {
+        next = -Math.max(4, MAX_SPEED * ((EDGE - clientY) / EDGE));
+      } else if (clientY > vh - EDGE) {
+        next = Math.max(4, MAX_SPEED * ((clientY - (vh - EDGE)) / EDGE));
+      }
+      speed = next;
+      if (speed && rafId === null) rafId = requestAnimationFrame(tick);
+    }
+
+    function stop() {
+      speed = 0;
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+    }
+
+    document.addEventListener('dragover', (e) => {
+      // Only steer scrolling for this app's own chips (marshal/employee
+      // drags) -- dataTransfer.types is readable during dragover even though
+      // getData() isn't, so this doesn't need to know which chip it is.
+      const types = e.dataTransfer && e.dataTransfer.types;
+      const ours = types && Array.from(types).some((t) => t === 'text/marshal-id' || t === 'text/employee-id');
+      if (!ours) return;
+      updateSpeed(e.clientY);
+    });
+    document.addEventListener('dragend', stop);
+    document.addEventListener('drop', stop);
+    // Dragging the pointer off the browser window entirely stops delivering
+    // dragover events, so without this the last speed would keep scrolling.
+    document.addEventListener('dragleave', (e) => {
+      if (!e.relatedTarget) stop();
+    });
+  })();
+
   // ---------------- Tabs ----------------
   const tabButtons = document.querySelectorAll('.tab-btn');
   tabButtons.forEach((btn) => {
