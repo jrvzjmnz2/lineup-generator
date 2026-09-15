@@ -111,7 +111,7 @@
     }
   }
 
-  function buildGenField(field) {
+  function buildGenField(field, typeName, initialValue) {
     const def = FIELD_DEFS[field] || { label: field };
     const wrap = document.createElement('div');
     wrap.className = 'field' + (def.span === 2 ? ' span-2' : '');
@@ -119,9 +119,19 @@
 
     const id = `gen${field.charAt(0).toUpperCase()}${field.slice(1)}`;
     const label = document.createElement('label');
-    label.setAttribute('for', id);
     label.textContent = def.label;
     wrap.appendChild(label);
+
+    // Timing only: Team Lead / Off Site Support are the same employee
+    // checklist as the Create List card (buildGenTeamChecklist), not free
+    // text. No `for` on the label here -- there's no single focusable target
+    // to point it at, just the <details> disclosure inside.
+    if (typeName === TEAM_DROPDOWN_TYPE && TEAM_DROPDOWN_FIELDS.includes(field)) {
+      wrap.appendChild(buildGenTeamChecklist(field, id, initialValue));
+      return wrap;
+    }
+
+    label.setAttribute('for', id);
 
     const input = document.createElement('input');
     input.type = def.type || 'text';
@@ -129,11 +139,13 @@
     input.dataset.genField = field;
     if (def.required) input.required = true;
     if (def.placeholder) input.placeholder = def.placeholder;
+    if (initialValue !== undefined) input.value = initialValue;
     wrap.appendChild(input);
 
     // The date field carries the weekday/weekend hint. It is rebuilt with the
     // field, so the hint element and its listeners are wired here rather than
-    // once at page load.
+    // once at page load. Wiring it after `initialValue` is set means a
+    // carried-over date shows its hint immediately, with no extra dispatch.
     if (field === 'date') {
       const hint = document.createElement('p');
       hint.className = 'field-hint';
@@ -191,13 +203,7 @@
     }
 
     formFieldsFor(typeName).forEach((field) => {
-      const el = buildGenField(field);
-      const input = el.querySelector('[data-gen-field]');
-      if (keep[field] !== undefined) {
-        input.value = keep[field];
-        if (field === 'date') input.dispatchEvent(new Event('input'));
-      }
-      genFieldGrid.appendChild(el);
+      genFieldGrid.appendChild(buildGenField(field, typeName, keep[field]));
     });
 
     t.roles.forEach((role) => {
@@ -383,6 +389,147 @@
   // Shown in their own block at the bottom, Timing events only.
   const CARD_LOGISTICS_FIELDS = ['transpo', 'driver', 'driverNumber', 'rate'];
 
+  // Team Lead / Off Site Support, on Timing events only, become a checklist
+  // against the employee_list roster instead of free text -- picked over
+  // every-type because Timing is the type this actually matters for day to
+  // day. Kit Claiming's Off Site Support and every type's Team Leader stay
+  // plain text, unchanged. Applies both here (Create List) and in Generate
+  // Event -- see buildGenTeamChecklist below.
+  //
+  // The stored value is still the same plain string the field always held,
+  // historically several names typed as "Brett / Jordan / Joshua" (see the
+  // Generate Event placeholder) -- so nothing about the schema, the PDF or
+  // the announcement needed to change. The checklist just reads and writes
+  // that string, split/joined on " / ".
+  //
+  // The checkbox list itself is further filtered to employees whose own
+  // `team` field (a column on employee_list, alongside `name`) matches this
+  // type -- not the whole roster. A Kit Claiming-team employee never shows up
+  // as a pickable Team Lead on a Timing event, even though the widget itself
+  // only appears on Timing events.
+  const TEAM_DROPDOWN_TYPE = 'Timing';
+  const TEAM_DROPDOWN_FIELDS = ['teamLeader', 'offsiteSupport'];
+
+  function employeesForTeam(teamName) {
+    const target = String(teamName || '').trim().toLowerCase();
+    if (!target) return [];
+    return allEmployees.filter((e) => String(e.team || '').trim().toLowerCase() === target);
+  }
+
+  function splitTeamNames(value) {
+    return String(value || '').split('/').map((s) => s.trim()).filter(Boolean);
+  }
+
+  function joinTeamNames(names) {
+    return names.join(' / ');
+  }
+
+  // Builds the checklist markup shared by the Create List card and Generate
+  // Event: a <details> summary plus one checkbox row per employee on
+  // `teamEmployees`. `preserved` is shown in the summary alongside whatever
+  // is checked but never gets a checkbox of its own (see buildTeamMultiSelect
+  // below for what it holds). `onToggle(checkedNames)` fires whenever a box
+  // changes, with the full checked-name list in DOM order; the caller
+  // decides what to do with it (save immediately, or just keep a hidden
+  // field in sync).
+  function buildTeamChecklistWidget(teamEmployees, initialChecked, preserved, onToggle) {
+    const checked = new Set(initialChecked);
+
+    const wrap = document.createElement('details');
+    wrap.className = 'team-multiselect';
+
+    const summary = document.createElement('summary');
+    summary.className = 'team-multiselect-summary';
+    const renderSummary = () => {
+      const all = [...checked, ...preserved];
+      summary.textContent = all.length ? all.join(', ') : 'Select…';
+      summary.title = all.length ? all.join(', ') : 'No one selected';
+    };
+    renderSummary();
+    wrap.appendChild(summary);
+
+    const list = document.createElement('div');
+    list.className = 'team-multiselect-list';
+
+    if (!teamEmployees.length) {
+      const empty = document.createElement('p');
+      empty.className = 'team-multiselect-empty';
+      empty.textContent = allEmployees.length
+        ? `No employees are tagged for the ${TEAM_DROPDOWN_TYPE} team`
+        : 'No employees on file';
+      list.appendChild(empty);
+    } else {
+      teamEmployees.forEach((emp) => {
+        const row = document.createElement('label');
+        row.className = 'team-check-row';
+
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = checked.has(emp.name);
+        cb.addEventListener('change', () => {
+          if (cb.checked) checked.add(emp.name);
+          else checked.delete(emp.name);
+          renderSummary();
+          onToggle([...checked]);
+        });
+        row.appendChild(cb);
+
+        const span = document.createElement('span');
+        span.textContent = emp.name;
+        row.appendChild(span);
+
+        list.appendChild(row);
+      });
+    }
+    wrap.appendChild(list);
+
+    return wrap;
+  }
+
+  // A name already on the field that doesn't match anyone currently on the
+  // Timing team (older free text, someone since removed from the roster, or
+  // someone on a different team) is never offered as a checkbox, but it is
+  // also never silently dropped -- it rides along untouched as `preserved`
+  // and is written back on every save, alongside whatever the checkboxes
+  // decide.
+  function buildTeamMultiSelect(ev, field) {
+    const teamEmployees = employeesForTeam(TEAM_DROPDOWN_TYPE);
+    const empNameSet = new Set(teamEmployees.map((e) => e.name));
+    const current = splitTeamNames(ev[field]);
+    const checked = current.filter((n) => empNameSet.has(n));
+    const preserved = current.filter((n) => !empNameSet.has(n));
+
+    return buildTeamChecklistWidget(teamEmployees, checked, preserved, (checkedNames) => {
+      updateEventField(ev._id, field, joinTeamNames([...checkedNames, ...preserved]));
+    });
+  }
+
+  // Same checklist for the Generate Event form, where there is nothing to
+  // save yet -- it just keeps a hidden field (`data-gen-field`) in sync so
+  // the existing generic value-collection code (the submit handler, and the
+  // "carry values across a type switch" logic in renderGenerateForm) picks
+  // it up exactly like a plain text field, with no changes to either.
+  function buildGenTeamChecklist(field, id, initialValue) {
+    const teamEmployees = employeesForTeam(TEAM_DROPDOWN_TYPE);
+    const empNameSet = new Set(teamEmployees.map((e) => e.name));
+    const current = splitTeamNames(initialValue);
+    const checked = current.filter((n) => empNameSet.has(n));
+    const preserved = current.filter((n) => !empNameSet.has(n));
+
+    const hidden = document.createElement('input');
+    hidden.type = 'hidden';
+    hidden.id = id;
+    hidden.dataset.genField = field;
+    hidden.value = joinTeamNames([...checked, ...preserved]);
+
+    const widget = buildTeamChecklistWidget(teamEmployees, checked, preserved, (checkedNames) => {
+      hidden.value = joinTeamNames([...checkedNames, ...preserved]);
+    });
+    widget.appendChild(hidden);
+
+    return widget;
+  }
+
   // One-time type picker for an event saved before event types existed.
   //
   // Setting a type is one-way (the server refuses to re-type a typed event):
@@ -562,7 +709,9 @@
     labelSpan.textContent = `${label.toUpperCase()}:`;
     row.appendChild(labelSpan);
 
-    if (editable) {
+    if (editable && ev.eventType === TEAM_DROPDOWN_TYPE && TEAM_DROPDOWN_FIELDS.includes(field)) {
+      row.appendChild(buildTeamMultiSelect(ev, field));
+    } else if (editable) {
       const input = document.createElement('input');
       input.type = 'text';
       input.value = ev[field] || '';
@@ -1087,6 +1236,54 @@
     }
   }
 
+  // Each attended event collapses to one line: name, date, role (note), and
+  // a status pill. Beyond the first two (already the most recent, since
+  // /admin/marshal-list feeds them in date-descending order) the rest sit
+  // behind a "+N more" toggle so a long history doesn't blow out row height.
+  const ATTENDANCE_VISIBLE = 2;
+
+  function buildAttendanceRow(a) {
+    const item = document.createElement('div');
+    item.className = 'attendance-item';
+    const roleNote = a.note ? `${escapeHtml(a.role)} (${escapeHtml(a.note)})` : escapeHtml(a.role);
+    const lineText = `${a.eventName} — ${formatDate(a.date)} · ${a.role}${a.note ? ` (${a.note})` : ''}`;
+    item.innerHTML = `<span class="ev-line" title="${escapeHtml(lineText)}">` +
+        `<span class="ev-name">${escapeHtml(a.eventName)}</span>` +
+        `<span class="ev-meta"> · ${formatDate(a.date)} · ${roleNote}</span>` +
+      `</span>` +
+      `<span class="status-pill ${a.status}">${a.status}</span>`;
+    return item;
+  }
+
+  function buildAttendanceList(events) {
+    const wrap = document.createElement('div');
+    wrap.className = 'attendance-list';
+
+    events.slice(0, ATTENDANCE_VISIBLE).forEach((a) => wrap.appendChild(buildAttendanceRow(a)));
+
+    const hiddenCount = events.length - ATTENDANCE_VISIBLE;
+    if (hiddenCount > 0) {
+      const extra = document.createElement('div');
+      extra.className = 'attendance-extra';
+      extra.hidden = true;
+      events.slice(ATTENDANCE_VISIBLE).forEach((a) => extra.appendChild(buildAttendanceRow(a)));
+      wrap.appendChild(extra);
+
+      const toggle = document.createElement('button');
+      toggle.type = 'button';
+      toggle.className = 'attendance-toggle';
+      toggle.textContent = `+${hiddenCount} more`;
+      toggle.addEventListener('click', () => {
+        const willExpand = extra.hidden;
+        extra.hidden = !willExpand;
+        toggle.textContent = willExpand ? 'Show less' : `+${hiddenCount} more`;
+      });
+      wrap.appendChild(toggle);
+    }
+
+    return wrap;
+  }
+
   function renderMarshalList() {
     marshalListWrap.innerHTML = '';
     if (marshalListData.length === 0) {
@@ -1137,16 +1334,7 @@
       if (!m.eventsAttended || m.eventsAttended.length === 0) {
         attendTd.innerHTML = '<span class="no-attendance">No events yet</span>';
       } else {
-        const list = document.createElement('div');
-        list.className = 'attendance-list';
-        m.eventsAttended.forEach((a) => {
-          const item = document.createElement('div');
-          item.className = 'attendance-item';
-          item.innerHTML = `<span class="ev-name">${escapeHtml(a.eventName)}</span><span class="status-pill ${a.status}">${a.status}</span><br/>
-            <span class="ev-meta">${formatDate(a.date)} — ${escapeHtml(a.role)}${a.note ? ` (${escapeHtml(a.note)})` : ''}</span>`;
-          list.appendChild(item);
-        });
-        attendTd.appendChild(list);
+        attendTd.appendChild(buildAttendanceList(m.eventsAttended));
       }
       tr.appendChild(attendTd);
 
@@ -1192,17 +1380,34 @@
     }
   }
 
-  // Rating is shown as a monochrome INTENSITY ramp: faint at 1, full strength
-  // at 10. The ITEMHOUND palette has no green/amber, so a red-to-green scale
-  // would mean inventing unofficial brand colors -- intensity carries the same
-  // "higher is stronger" reading using only approved colors.
+  // Rating is shown as a TRAFFIC LIGHT: red at 1, amber in the middle, green
+  // at 10. Returns null (no tint) when unrated.
   //
-  // The ramp has to flip with the theme: maroon on dark slate is roughly
-  // 1.4:1, i.e. invisible, so in dark mode the ramp runs on white instead.
-  // Either way the metaphor holds -- more intense means higher rated.
-  // Returns null (no tint) when unrated.
+  // DELIBERATE BRAND DEPARTURE, approved 2026-09-15. The ITEMHOUND palette is
+  // four colours and contains no green or amber, so this is the second
+  // recorded exception after dark mode. It replaces the monochrome maroon
+  // intensity ramp that shipped with the 2026-09-03 redesign, which was
+  // on-palette but made 4 and 6 hard to tell apart at a glance.
+  //
+  // TWO sets of stops, not one. Chips sit on white in light mode and on
+  // #445259 in dark, and no single ramp clears 3:1 against both surfaces.
+  // Every value here was measured rather than eyeballed -- see
+  // preview/rating-contrast.js, which walks all 10 ratings in both themes and
+  // asserts the chip text stays >= 4.5:1 on the tinted background and the
+  // solid edge stays >= 3:1 against the chip surface. Worst observed: 4.61:1
+  // text (dark, rating 10) and 3.27:1 edge (light, rating 6).
+  //
+  // The light-mode middle stop is a dark gold rather than a true yellow:
+  // yellow on white tops out near 2.7:1 as a solid bar, under the 3:1 a
+  // non-text UI element needs to be seen at all.
+  const RATING_STOPS = {
+    light: [[198, 40, 40], [192, 138, 0], [46, 125, 50]],     // #C62828 #C08A00 #2E7D32
+    dark: [[255, 135, 135], [251, 191, 36], [74, 222, 128]],  // #FF8787 #FBBF24 #4ADE80
+  };
+
   function unratedSwatch() {
-    // Kept below the rating-1 value (0.18) so "unrated" never reads as rated.
+    // Neutral, and deliberately outside the ramp: unrated must not read as a
+    // low rating, which a pale red would.
     return isDarkTheme() ? 'rgba(255, 255, 255, 0.10)' : 'rgba(217, 217, 217, 0.62)';
   }
   function isDarkTheme() {
@@ -1210,13 +1415,18 @@
   }
   function ratingRamp(rating) {
     const t = (Math.min(10, Math.max(1, rating)) - 1) / 9; // 0 -> 1
-    // The dark edge ramp runs 0.18 -> 1.0: measured against CIE L*, a linear
-    // ramp spaces more evenly than any gamma curve tried (evenness 0.87 vs
-    // 0.47 at t^1.3), and this range yields ~19% more total lightness travel
-    // than starting at 0.30, so 8 vs 9 vs 10 stay tellable apart.
-    return isDarkTheme()
-      ? { rgb: '255, 255, 255', tint: 0.05 + t * 0.16, edge: 0.18 + t * 0.82 }
-      : { rgb: '99, 10, 31', tint: 0.05 + t * 0.15, edge: 0.28 + t * 0.72 };
+    const stops = isDarkTheme() ? RATING_STOPS.dark : RATING_STOPS.light;
+    // Interpolated in two segments so the midpoint lands on amber. A direct
+    // red-to-green interpolation passes through mud instead.
+    const seg = t < 0.5 ? 0 : 1;
+    const k = t < 0.5 ? t / 0.5 : (t - 0.5) / 0.5;
+    const from = stops[seg];
+    const to = stops[seg + 1];
+    const rgb = from.map((c, i) => Math.round(c + (to[i] - c) * k)).join(', ');
+    // The hue carries the rating, so the background tint barely ramps -- a
+    // chip is never so saturated that the name on it gets hard to read. The
+    // edge is full strength, which is what the Marshal List swatch shows.
+    return { rgb, tint: (isDarkTheme() ? 0.16 : 0.12) + t * 0.10, edge: 1 };
   }
   function ratingColor(rating) {
     if (!rating) return null;
@@ -1492,9 +1702,16 @@
 
   // Initial load. The type catalogue comes first: the Generate Event tab is
   // the one showing on arrival and it cannot build its form without it.
+  //
+  // loadCreateList() is also what fetches `allEmployees` -- needed by the
+  // Team Lead / Off Site Support checklist in THIS form, not just the
+  // Create List tab. It's normally done well before anyone finishes picking
+  // "Timing" from the type select, but on the off chance it wasn't, re-render
+  // once it lands so the checklist doesn't get stuck showing an empty roster.
   (async () => {
     await loadEventTypes();
     renderGenerateForm();
-    loadCreateList();
+    await loadCreateList();
+    if (genTypeSelect.value === TEAM_DROPDOWN_TYPE) renderGenerateForm();
   })();
 })();

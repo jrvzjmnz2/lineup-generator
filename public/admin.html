@@ -84,9 +84,6 @@
               <select id="genEventType" required>
                 <option value="">Select an event type…</option>
               </select>
-              <p class="field-hint" id="genTypeHint">
-                Each type has its own entries and its own roles — pick one and the form below fills in.
-              </p>
             </div>
 
             <p class="form-section-title">Event Details</p>
@@ -95,11 +92,6 @@
             </div>
 
             <p class="form-section-title">Role Slots</p>
-            <p class="lede" style="margin-bottom: var(--sp-4);">
-              Set how many people are needed for each role at this event. Only the roles that
-              belong to the chosen event type are listed. You can adjust these counts later from
-              the event card in Create List.
-            </p>
             <div id="roleCounterGrid" class="role-counter-grid">
               <p class="pool-empty" data-placeholder>Choose an event type to see its roles.</p>
             </div>
@@ -115,12 +107,6 @@
           <div class="panel-head-text">
             <p class="eyebrow">Section 02</p>
             <h1>Create List</h1>
-            <p class="lede">
-              Drag marshals from each event's pool into a role slot. On <strong>weekend</strong>
-              events a marshal can hold only one event at a time; on <strong>weekday</strong>
-              events they can be lined up on as many as you need. Starring a marshal as exempt
-              lifts the weekend limit for this cycle.
-            </p>
           </div>
           <div class="panel-head-actions">
             <button class="btn-outline btn-small" id="refreshCreateList">Refresh</button>
@@ -155,11 +141,6 @@
           <div class="panel-head-text">
             <p class="eyebrow">Section 04</p>
             <h1>Marshal List</h1>
-            <p class="lede">
-              Everyone who has ever submitted the sign-up form, the events they've worked, and a
-              1–10 rating you can set. Rating tints a marshal's name in Create List — the
-              stronger the tint, the higher the rating.
-            </p>
           </div>
           <div class="panel-head-actions">
             <button class="btn-outline btn-small" id="refreshMarshalList">Refresh</button>

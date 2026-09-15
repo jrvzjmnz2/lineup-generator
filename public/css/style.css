@@ -901,6 +901,66 @@ label {
 .detail-row input:hover { border-color: var(--line-strong); background: var(--surface-input); }
 .detail-row input:focus { border-color: var(--focus-border); background: var(--surface-input); }
 
+/* Team Lead / Off Site Support checklist -- Timing events only, in both the
+   Create List card and Generate Event. An in-flow <details> disclosure
+   rather than a floating popover, deliberately: the card has
+   `overflow: hidden` for its rounded corners, which would clip an
+   absolutely-positioned panel the moment it's near the bottom of a card.
+   Base look matches a normal text input (Generate Event's context); the
+   Create List card overrides to its own borderless-until-hover detail-row
+   style below, matching every other field in that column. */
+.detail-row:has(.team-multiselect) { align-items: start; }
+.detail-row:has(.team-multiselect) .dlabel { padding-top: 6px; }
+.team-multiselect { width: 100%; }
+.team-multiselect-summary {
+  display: block;
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--surface-input);
+  font-family: var(--font-body);
+  font-size: var(--fs-sm);
+  color: var(--text);
+  cursor: pointer;
+  list-style: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.team-multiselect-summary::-webkit-details-marker { display: none; }
+.team-multiselect-summary::after { content: '▾'; float: right; color: var(--text-faint); margin-left: var(--sp-2); }
+.team-multiselect[open] > .team-multiselect-summary::after { content: '▴'; }
+.team-multiselect-summary:hover { border-color: rgba(37, 54, 62, 0.32); }
+
+.detail-row .team-multiselect-summary {
+  padding: 5px 9px;
+  border-color: transparent;
+  background: transparent;
+  border-radius: var(--r-sm);
+}
+.detail-row .team-multiselect-summary:hover { border-color: var(--line-strong); background: var(--surface-input); }
+.team-multiselect-list {
+  margin-top: 6px;
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 4px;
+  background: var(--surface-input);
+}
+.team-check-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 4px 6px;
+  border-radius: var(--r-sm);
+  font-size: var(--fs-xs);
+  cursor: pointer;
+}
+.team-check-row:hover { background: var(--wash-gray); }
+.team-check-row input { width: auto; margin: 0; accent-color: var(--maroon); flex: 0 0 auto; }
+.team-multiselect-empty { padding: 4px 6px; font-size: var(--fs-xs); color: var(--text-faint); font-style: italic; margin: 0; }
+
 /* ---- Role blocks / drop slots ---- */
 .role-block { margin-bottom: var(--sp-4); }
 .role-block .role-title {
@@ -1145,12 +1205,42 @@ label {
   white-space: nowrap;
 }
 
-.attendance-list { display: flex; flex-direction: column; gap: 7px; min-width: 236px; max-width: 340px; }
-.attendance-item { font-size: var(--fs-xs); line-height: 1.5; }
+.attendance-list { display: flex; flex-direction: column; gap: 5px; min-width: 236px; max-width: 340px; }
+.attendance-extra { display: flex; flex-direction: column; gap: 5px; }
+.attendance-extra[hidden] { display: none; }
+.attendance-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-xs);
+  line-height: 1.4;
+}
+.attendance-item .ev-line {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
 .attendance-item .ev-name { font-family: var(--font-head); font-weight: 600; color: var(--text); }
 .attendance-item .ev-meta { color: var(--text-faint); }
+.attendance-toggle {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--link-fg);
+  cursor: pointer;
+  text-decoration: underline;
+}
+.attendance-toggle:hover { opacity: 0.8; }
 .status-pill {
   display: inline-block;
+  flex-shrink: 0;
   font-family: var(--font-head);
   font-size: 9.5px;
   font-weight: 700;
@@ -1158,7 +1248,6 @@ label {
   letter-spacing: 0.1em;
   border-radius: 100px;
   padding: 1px 8px;
-  margin-left: 6px;
   vertical-align: 1px;
 }
 .status-pill.active { background: var(--pill-active-bg); color: var(--pill-active-fg); }
