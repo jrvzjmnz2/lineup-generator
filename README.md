@@ -16,17 +16,6 @@ npm install
 
 Edit `.env` (already pre-filled with the Atlas connection string you provided):
 
-```
-MONGO_URI=mongodb+srv://Admin:ADMIN@inventorymanagement.v2epjq4.mongodb.net/?appName=inventorymanagement
-MONGO_DB_NAME=lineup
-JWT_SECRET=change_this_to_a_long_random_secret_before_production
-GOOGLE_CLIENT_ID=your_google_oauth_client_id
-PORT=3000
-SEED_ADMIN_USERNAME=admin
-SEED_ADMIN_EMAIL=admin@itemhound.com
-SEED_ADMIN_PASSWORD=ChangeMe123!
-```
-
 **Important:** change `JWT_SECRET` and `SEED_ADMIN_PASSWORD` before real use, and make sure your current network's IP is allowed in Atlas (Network Access → IP Access List). If you host this app somewhere else later, that host's IP needs to be whitelisted too. `GOOGLE_CLIENT_ID` is required for marshal sign-in to work — see `DEPLOYMENT.md` for how to create one; if it's left blank the app still runs, the Google button just shows as unavailable.
 
 Create the first employee/admin account (marshals sign up with Google now, so this is the only way to get an admin account):
