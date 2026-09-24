@@ -84,6 +84,11 @@ const eventSchema = new mongoose.Schema(
 
     status: { type: String, enum: ['active', 'completed'], default: 'active' },
     completedAt: { type: Date, default: null },
+
+    // Whether this active event is offered on the marshal sign-up form. Admins
+    // flip it from the card's On/Off switch. Events saved before this existed
+    // have no field at all, so every read treats "not explicitly false" as ON.
+    signupOpen: { type: Boolean, default: true },
   },
   { timestamps: true, collection: 'events' }
 );
@@ -132,6 +137,7 @@ eventSchema.methods.toCard = function () {
     dayCount: dayCount(this.date, this.endDate),
     allowsMultiDay: allowsMultiDay(this.eventType),
     eventType: this.eventType || null,
+    signupOpen: this.signupOpen !== false,
     typeFields: fieldsFor(this.eventType),
     typeRoles,
     extraRoles,

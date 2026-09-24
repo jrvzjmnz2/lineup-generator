@@ -1937,6 +1937,63 @@ label {
 
 #createListTypeFilter { width: auto; min-width: 180px; }
 
+/* Sign-up On/Off switch in the slate card head. ON = the event is offered on
+   the marshal sign-up form. Stays visible when the card is collapsed, since
+   it lives in the head. */
+.signup-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+}
+.signup-switch input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+}
+.signup-switch-track {
+  position: relative;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 18px;
+  border-radius: 100px;
+  background: rgba(255, 255, 255, 0.2);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+  transition: background 160ms var(--ease);
+}
+.signup-switch-track::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--text-on-dark);
+  transition: transform 160ms var(--ease);
+}
+.signup-switch input:checked + .signup-switch-track { background: #2E9E5B; box-shadow: none; }
+.signup-switch input:checked + .signup-switch-track::after { transform: translateX(16px); }
+.signup-switch input:focus-visible + .signup-switch-track {
+  outline: 2px solid var(--text-on-dark);
+  outline-offset: 2px;
+}
+.signup-switch input:disabled + .signup-switch-track { opacity: 0.5; }
+.signup-switch-text {
+  font-family: var(--font-head);
+  font-size: var(--fs-eyebrow);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-on-dark-muted);
+}
+.signup-switch.on .signup-switch-text { color: var(--text-on-dark); }
+
 /* Phone width: the name gets the full first line, tags + chevron drop to a
    second one, so a long event name no longer squeezes them off the edge. */
 @media (max-width: 560px) {

@@ -655,6 +655,22 @@ router.post('/events/:id/complete', async (req, res) => {
   }
 });
 
+// POST /api/admin/events/:id/signup { open: true|false } -- show or hide the
+// event on the marshal sign-up form. Lineups and existing submissions are left
+// alone; the switch only decides what the form offers from now on.
+router.post('/events/:id/signup', async (req, res) => {
+  try {
+    const { open } = req.body;
+    if (typeof open !== 'boolean') return res.status(400).json({ error: 'open must be true or false' });
+    const event = await Event.findByIdAndUpdate(req.params.id, { signupOpen: open }, { new: true });
+    if (!event) return res.status(404).json({ error: 'Event not found' });
+    res.json({ event: event.toCard() });
+  } catch (err) {
+    console.error('Sign-up switch error:', err);
+    res.status(500).json({ error: 'Could not change the sign-up switch.' });
+  }
+});
+
 // DELETE /api/admin/events/:id -- permanently remove an event (from either Create List or All Events)
 router.delete('/events/:id', async (req, res) => {
   try {

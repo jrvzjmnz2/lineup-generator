@@ -785,6 +785,51 @@
     }
   }
 
+  // On/Off switch in the card head: ON events are offered on the marshal
+  // sign-up form, OFF events are hidden from it. It sits inside the head,
+  // which is the collapse control on Create List, so its clicks and keys are
+  // kept from reaching the head and toggling the card.
+  function buildSignupSwitch(ev) {
+    const on = ev.signupOpen !== false;
+    const wrap = document.createElement('label');
+    wrap.className = 'signup-switch' + (on ? ' on' : '');
+    wrap.title = on
+      ? 'Shown on the marshal sign-up form. Switch off to hide it.'
+      : 'Hidden from the marshal sign-up form. Switch on to show it.';
+
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.setAttribute('role', 'switch');
+    input.checked = on;
+    input.setAttribute('aria-label', `Show ${ev.name} on the marshal sign-up form`);
+
+    const track = document.createElement('span');
+    track.className = 'signup-switch-track';
+    track.setAttribute('aria-hidden', 'true');
+
+    const text = document.createElement('span');
+    text.className = 'signup-switch-text';
+    text.textContent = on ? 'Sign-up: On' : 'Sign-up: Off';
+
+    wrap.append(input, track, text);
+    ['click', 'keydown'].forEach((type) => wrap.addEventListener(type, (e) => e.stopPropagation()));
+    input.addEventListener('change', () => setSignupOpen(ev._id, input.checked, input));
+    return wrap;
+  }
+
+  async function setSignupOpen(eventId, open, input) {
+    input.disabled = true;
+    try {
+      const { event } = await apiRequest(`/admin/events/${eventId}/signup`, { method: 'POST', body: { open } });
+      replaceLocalEvent(event);
+      showToast(open ? 'Event is now on the sign-up form.' : 'Event is now hidden from the sign-up form.', 'success');
+    } catch (err) {
+      input.checked = !open;
+      input.disabled = false;
+      showToast(err.message, 'error');
+    }
+  }
+
   function buildEventCard(ev, { editable }) {
     const card = document.createElement('div');
     card.className = 'event-card';
@@ -817,6 +862,7 @@
       `<span class="card-head-tags">${typeTag}` +
       `<span class="${tagClass}" title="${tagTitle}">${tagText}</span></span></div>` +
       `<div class="meta">${dayLabel}${formatDateRange(ev.date, ev.endDate)}${dayCountText} &nbsp;•&nbsp; ${escapeHtml(ev.location)}</div>`;
+    if (editable) head.appendChild(buildSignupSwitch(ev));
     card.appendChild(head);
 
     // Edit Event Details (name / dates / location) opens right under the head.

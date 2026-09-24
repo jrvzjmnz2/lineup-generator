@@ -9,6 +9,10 @@ const { EVENT_TYPES, rolesFor, isEventType } = require('../config/eventTypes');
 // The label an untyped legacy event is grouped under on the sign-up form.
 const UNTYPED_GROUP = 'Other';
 
+// Active events an admin has left switched ON. `$ne: false` rather than
+// `true` so events saved before the switch existed (no field) stay listed.
+const OPEN_FOR_SIGNUP = { status: 'active', signupOpen: { $ne: false } };
+
 const router = express.Router();
 
 // GET /api/marshal/events -- events a marshal can select on the join form
@@ -18,7 +22,7 @@ const router = express.Router();
 // actually has. `roles` (the flat master list) is still sent for the Other
 // group -- events saved before types existed can be lined up in anything.
 router.get('/events', requireAuth, async (req, res) => {
-  const events = await Event.find({ status: 'active' })
+  const events = await Event.find(OPEN_FOR_SIGNUP)
     .select('name date endDate location eventType')
     .sort({ date: 1 })
     .lean();
@@ -90,7 +94,7 @@ router.post('/submit', requireAuth, requireRole('marshal'), async (req, res) => 
     let finalRoles = [];
 
     if (events.length > 0) {
-      const validEvents = await Event.find({ _id: { $in: events }, status: 'active' })
+      const validEvents = await Event.find({ _id: { $in: events }, ...OPEN_FOR_SIGNUP })
         .select('_id eventType')
         .lean();
       validEventIds = validEvents.map((e) => e._id);
@@ -125,6 +129,28 @@ router.post('/submit', requireAuth, requireRole('marshal'), async (req, res) => 
           });
         }
         finalRolesByType[type] = chosen;
+      }
+
+      // Events switched OFF are hidden from the form, so the marshal could not
+      // have re-ticked them. Keep any they had already picked (with the roles
+      // stored for that type) instead of silently dropping them on resubmit.
+      const previous = await Marshal.findOne({ userId: req.user.id }).lean();
+      if (previous && previous.events && previous.events.length) {
+        const closedKept = await Event.find({
+          _id: { $in: previous.events },
+          status: 'active',
+          signupOpen: false,
+        })
+          .select('_id eventType')
+          .lean();
+        for (const ev of closedKept) {
+          validEventIds.push(ev._id);
+          const type = ev.eventType || UNTYPED_GROUP;
+          const prevRoles = previous.rolesByType && previous.rolesByType[type];
+          if (!finalRolesByType[type] && Array.isArray(prevRoles) && prevRoles.length) {
+            finalRolesByType[type] = prevRoles;
+          }
+        }
       }
 
       finalRoles = [...new Set(Object.values(finalRolesByType).flat())];
