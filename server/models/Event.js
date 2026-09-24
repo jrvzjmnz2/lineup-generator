@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 const { ALL_ROLES } = require('../config/roles');
-const { isWeekendDate, dayName } = require('../config/schedule');
-const { EVENT_TYPE_NAMES, fieldsFor, rolesFor, hasLogistics } = require('../config/eventTypes');
+const { isWeekendDate, dayName, dayCount } = require('../config/schedule');
+const { EVENT_TYPE_NAMES, fieldsFor, rolesFor, hasLogistics, allowsMultiDay } = require('../config/eventTypes');
 
 // A role slot holds either a MARSHAL (someone who submitted the sign-up form)
 // or an EMPLOYEE (a name from the employee_list roster). Exactly one of the two
@@ -44,6 +44,12 @@ const eventSchema = new mongoose.Schema(
 
     name: { type: String, required: true, trim: true },
     date: { type: String, required: true }, // stored as entered (e.g. 2026-08-09), formatted on the card
+    // Last day of a consecutive-day event, same format as `date`. Empty for a
+    // one-day event -- which is every event saved before this existed, so no
+    // migration is needed. Only non-Timing types may set it, and the whole
+    // range must be weekdays (see validateWeekdayRange in config/schedule.js),
+    // so `date` alone still decides weekday vs weekend.
+    endDate: { type: String, default: '' },
     location: { type: String, required: true, trim: true },
     teamLeader: { type: String, default: '' },
     offsiteSupport: { type: String, default: '' },
@@ -121,6 +127,10 @@ eventSchema.methods.toCard = function () {
     assignments,
     isWeekend: isWeekendDate(this.date),
     dayName: dayName(this.date),
+    endDate: this.endDate || '',
+    endDayName: this.endDate ? dayName(this.endDate) : '',
+    dayCount: dayCount(this.date, this.endDate),
+    allowsMultiDay: allowsMultiDay(this.eventType),
     eventType: this.eventType || null,
     typeFields: fieldsFor(this.eventType),
     typeRoles,

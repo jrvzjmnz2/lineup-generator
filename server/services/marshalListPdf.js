@@ -123,12 +123,33 @@ function compactDate(date) {
  * server already derived.
  */
 function longDate(event) {
+  const parse = (raw) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(raw || '').trim());
+    if (!m) return null;
+    const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    return Number.isNaN(d.getTime()) ? null : d;
+  };
   const raw = String(event.date || '').trim();
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(raw);
-  if (!m) return raw.toUpperCase();
-  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-  if (Number.isNaN(d.getTime())) return raw.toUpperCase();
+  const d = parse(raw);
+  if (!d) return raw.toUpperCase();
   const day = event.dayName || d.toLocaleDateString('en-US', { weekday: 'long' });
+
+  // Consecutive-day event, kept short enough for one header line:
+  //   same month  -> "WED–FRI, SEPTEMBER 16–18, 2026"
+  //   across two  -> "WED, SEPTEMBER 30 – FRI, OCTOBER 2, 2026"
+  const end = parse(event.endDate);
+  if (end && end > d) {
+    const short = (x) => x.toLocaleDateString('en-US', { weekday: 'short' });
+    const month = (x) => x.toLocaleDateString('en-US', { month: 'long' });
+    const y1 = d.getFullYear();
+    const y2 = end.getFullYear();
+    if (y1 === y2 && d.getMonth() === end.getMonth()) {
+      return `${short(d)}\u2013${short(end)}, ${month(d)} ${d.getDate()}\u2013${end.getDate()}, ${y2}`.toUpperCase();
+    }
+    const firstYear = y1 === y2 ? '' : `, ${y1}`;
+    return `${short(d)}, ${month(d)} ${d.getDate()}${firstYear} \u2013 ${short(end)}, ${month(end)} ${end.getDate()}, ${y2}`.toUpperCase();
+  }
+
   const rest = d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
   return `${day}, ${rest}`.toUpperCase();
 }

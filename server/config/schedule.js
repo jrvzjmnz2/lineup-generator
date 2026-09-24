@@ -50,4 +50,67 @@ function dayName(dateStr) {
   return day === null ? '' : DAY_NAMES[day];
 }
 
-module.exports = { dayOfWeek, isWeekendDate, dayName, DAY_NAMES };
+// ---- Consecutive-day (multi-day) events -----------------------------------
+//
+// A non-Timing event may run over several consecutive days, stored as the
+// start `date` plus an `endDate`. The range must be WEEKDAYS ONLY: a range
+// that touches a Saturday or Sunday is refused, so a multi-day event is always
+// an unrestricted weekday event and never has to answer "is it a weekend
+// event or not?" halfway through. In practice that caps a range at Mon-Fri.
+
+/** "YYYY-MM-DD" -> UTC midnight Date, or null (same rules as dayOfWeek). */
+function parseDate(dateStr) {
+  if (dayOfWeek(dateStr) === null) return null;
+  const [, y, mo, d] = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(dateStr));
+  return new Date(Date.UTC(Number(y), Number(mo) - 1, Number(d)));
+}
+
+function toDateString(dt) {
+  return dt.toISOString().slice(0, 10);
+}
+
+/**
+ * Checks a start/end pair. Returns { endDate, dayCount } with endDate
+ * normalised ('' for a single-day event, including end === start), or
+ * { error } with a sentence fit to show the admin.
+ */
+function validateWeekdayRange(startStr, endStr) {
+  const start = parseDate(startStr);
+  if (!start) return { error: 'Pick a valid date.' };
+  const end = String(endStr || '').trim();
+  if (!end || end === String(startStr).slice(0, 10)) return { endDate: '', dayCount: 1 };
+
+  const last = parseDate(end);
+  if (!last) return { error: 'Pick a valid end date.' };
+  if (last < start) return { error: 'The end date is before the start date.' };
+
+  let count = 0;
+  for (let t = start.getTime(); t <= last.getTime(); t += 86400000) {
+    const dt = new Date(t);
+    const day = dt.getUTCDay();
+    if (day === SATURDAY || day === SUNDAY) {
+      return {
+        error: `Consecutive days are for weekday events only — ${DAY_NAMES[day]} ${dt.getUTCMonth() + 1}/${dt.getUTCDate()}/${dt.getUTCFullYear()} is a weekend. Keep the range within one Monday–Friday week.`,
+      };
+    }
+    count += 1;
+  }
+  return { endDate: toDateString(last), dayCount: count };
+}
+
+/** Number of days an event spans: 1 unless it carries a valid endDate. */
+function dayCount(startStr, endStr) {
+  if (!endStr) return 1;
+  const r = validateWeekdayRange(startStr, endStr);
+  return r.error ? 1 : r.dayCount;
+}
+
+module.exports = {
+  dayOfWeek,
+  isWeekendDate,
+  dayName,
+  DAY_NAMES,
+  parseDate,
+  validateWeekdayRange,
+  dayCount,
+};

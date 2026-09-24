@@ -174,7 +174,7 @@
     }
   }
 
-  function buildGenField(field, typeName, initialValue) {
+  function buildGenField(field, typeName, initialValue, keep = {}) {
     const def = FIELD_DEFS[field] || { label: field };
     const wrap = document.createElement('div');
     wrap.className = 'field' + (def.span === 2 ? ' span-2' : '');
@@ -196,6 +196,26 @@
 
     label.setAttribute('for', id);
 
+    // The date is a start/end pair on every type that can run over
+    // consecutive weekdays (all but Timing), and a single date otherwise.
+    // Either way it carries the weekday/weekend hint, rebuilt with the field.
+    if (field === 'date') {
+      const t = typeByName(typeName);
+      const allowRange = Boolean(t && t.multiDay);
+      if (allowRange) label.textContent = 'Date(s)';
+      const range = buildDateRangeInputs({
+        startId: id,
+        endId: 'genEndDate',
+        hintId: 'genDateHint',
+        startValue: initialValue,
+        endValue: keep.endDate,
+        allowRange,
+        genFields: true,
+      });
+      wrap.appendChild(range.el);
+      return wrap;
+    }
+
     const input = document.createElement('input');
     input.type = def.type || 'text';
     input.id = id;
@@ -204,41 +224,7 @@
     if (def.placeholder) input.placeholder = def.placeholder;
     if (initialValue !== undefined) input.value = initialValue;
     wrap.appendChild(input);
-
-    // The date field carries the weekday/weekend hint. It is rebuilt with the
-    // field, so the hint element and its listeners are wired here rather than
-    // once at page load. Wiring it after `initialValue` is set means a
-    // carried-over date shows its hint immediately, with no extra dispatch.
-    if (field === 'date') {
-      const hint = document.createElement('p');
-      hint.className = 'field-hint';
-      hint.id = 'genDateHint';
-      wrap.appendChild(hint);
-      wireDateHint(input, hint);
-    }
     return wrap;
-  }
-
-  // Tell the admin which rule the event they are creating will fall under,
-  // as soon as they pick a date.
-  function wireDateHint(input, hint) {
-    const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const paint = () => {
-      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(input.value || '');
-      if (!m) { hint.textContent = ''; hint.className = 'field-hint'; return; }
-      // Built from the parts via Date.UTC for the same reason the server does:
-      // parsing the string directly would shift the day in a non-UTC zone.
-      const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
-      const day = d.getUTCDay();
-      const weekend = day === 0 || day === 6;
-      hint.textContent = weekend
-        ? `${DAY_NAMES[day]} — weekend event: each marshal can hold only one weekend event.`
-        : `${DAY_NAMES[day]} — weekday event: marshals can be lined up on several of these.`;
-      hint.className = 'field-hint' + (weekend ? ' field-hint-weekend' : '');
-    };
-    input.addEventListener('change', paint);
-    input.addEventListener('input', paint);
-    paint();
   }
 
   /**
@@ -266,7 +252,7 @@
     }
 
     formFieldsFor(typeName).forEach((field) => {
-      genFieldGrid.appendChild(buildGenField(field, typeName, keep[field]));
+      genFieldGrid.appendChild(buildGenField(field, typeName, keep[field], keep));
     });
 
     t.roles.forEach((role) => {
@@ -312,9 +298,19 @@
     genFieldGrid.querySelectorAll('[data-gen-field]').forEach((el) => {
       payload[el.dataset.genField] = el.value.trim();
     });
+    // A range that crosses a weekend is refused before it reaches the server
+    // (the end-date input carries the reason as its validity message).
+    const endInput = document.getElementById('genEndDate');
+    if (endInput && !endInput.checkValidity()) {
+      generateAlertBox.innerHTML = `<div class="alert alert-error">${escapeHtml(endInput.validationMessage)}</div>`;
+      return;
+    }
 
     try {
-      await apiRequest('/admin/events', { method: 'POST', body: payload });
+      const created = await apiRequest('/admin/events', { method: 'POST', body: payload });
+      // A brand-new event is the one about to be lined up, so it opens
+      // already expanded in Create List while the rest stay collapsed.
+      if (created && created.event && created.event._id) expandedEvents.add(created.event._id);
       showToast(`${eventType} event added — it now appears in Create List and the marshal sign-up form.`, 'success');
       generateForm.reset();
       genTypeSelect.value = '';
@@ -328,6 +324,139 @@
   const createListGrid = document.getElementById('createListGrid');
   const createListAlertBox = document.getElementById('createListAlertBox');
   document.getElementById('refreshCreateList').addEventListener('click', loadCreateList);
+
+  // ---- Team filter + collapsible cards -------------------------------------
+  //
+  // "Team" here is the event type. '' means All Events; UNTYPED_FILTER picks
+  // out events saved before types existed (only offered while any exist).
+  // The filter only decides which cards are SHOWN -- the weekend one-event
+  // rule (buildAssignedMap) still looks at every active event, so hiding a
+  // card can never let someone be double-booked.
+  const createListTypeFilter = document.getElementById('createListTypeFilter');
+  const UNTYPED_FILTER = '__untyped';
+  const FILTER_KEY = 'lineup_createlist_team';
+  let createListFilter = '';
+  try { createListFilter = localStorage.getItem(FILTER_KEY) || ''; } catch (err) { /* storage blocked: default to All Events */ }
+
+  // Cards start collapsed; this holds the ids of the ones opened. It lives
+  // outside renderCreateList() because every assign/unassign rebuilds the
+  // grid, and an open card must stay open through that.
+  const expandedEvents = new Set();
+
+  createListTypeFilter.addEventListener('change', () => {
+    createListFilter = createListTypeFilter.value;
+    try { localStorage.setItem(FILTER_KEY, createListFilter); } catch (err) { /* not fatal */ }
+    renderCreateList();
+  });
+  document.getElementById('expandAllCreateList').addEventListener('click', () => {
+    eventsForFilter().forEach((ev) => expandedEvents.add(ev._id));
+    renderCreateList();
+  });
+  document.getElementById('collapseAllCreateList').addEventListener('click', () => {
+    eventsForFilter().forEach((ev) => expandedEvents.delete(ev._id));
+    renderCreateList();
+  });
+
+  function eventsForFilter() {
+    if (!createListFilter) return allActiveEvents;
+    if (createListFilter === UNTYPED_FILTER) return allActiveEvents.filter((ev) => !ev.eventType);
+    return allActiveEvents.filter((ev) => ev.eventType === createListFilter);
+  }
+
+  // Rebuilt on every render so the counts stay current as events are added,
+  // completed or deleted.
+  function renderTypeFilterOptions() {
+    const names = eventTypes.map((t) => t.name);
+    // Fall back to whatever types the events carry if the catalogue failed
+    // to load, so the filter still works.
+    allActiveEvents.forEach((ev) => {
+      if (ev.eventType && !names.includes(ev.eventType)) names.push(ev.eventType);
+    });
+    const untypedCount = allActiveEvents.filter((ev) => !ev.eventType).length;
+
+    // A remembered filter that no longer applies (e.g. the last untyped event
+    // was typed) falls back to All Events rather than showing an empty page.
+    const valid = createListFilter === '' ||
+      names.includes(createListFilter) ||
+      (createListFilter === UNTYPED_FILTER && untypedCount > 0);
+    if (!valid) createListFilter = '';
+
+    const opts = [{ value: '', label: 'All Events', count: allActiveEvents.length }];
+    names.forEach((name) => opts.push({
+      value: name,
+      label: name,
+      count: allActiveEvents.filter((ev) => ev.eventType === name).length,
+    }));
+    if (untypedCount) opts.push({ value: UNTYPED_FILTER, label: 'Untyped', count: untypedCount });
+
+    createListTypeFilter.innerHTML = '';
+    opts.forEach((o) => {
+      const opt = document.createElement('option');
+      opt.value = o.value;
+      opt.textContent = `${o.label} (${o.count})`;
+      createListTypeFilter.appendChild(opt);
+    });
+    createListTypeFilter.value = createListFilter;
+  }
+
+  // Slots filled vs. slots set, across the roles the card shows. An off-type
+  // role has no capacity of its own, so the people in it count as its size.
+  function fillSummary(ev) {
+    let filled = 0;
+    let total = 0;
+    [...(ev.typeRoles || []), ...(ev.extraRoles || [])].forEach((role) => {
+      const assigned = ((ev.assignments || {})[role] || []).length;
+      const cap = (ev.roleCapacities || {})[role] || 0;
+      filled += assigned;
+      total += Math.max(cap, assigned);
+    });
+    return { filled, total };
+  }
+
+  // Turns the slate card head into the open/close control and adds the
+  // at-a-glance line a collapsed card needs: slots filled, and how many
+  // signed-up marshals are still waiting in the pool.
+  function makeCollapsible(wrapper, card, ev) {
+    const head = card.querySelector('.card-head');
+    const open = expandedEvents.has(ev._id);
+    wrapper.classList.toggle('collapsed', !open);
+
+    head.classList.add('card-head-toggle');
+    head.setAttribute('role', 'button');
+    head.tabIndex = 0;
+    head.setAttribute('aria-expanded', String(open));
+    head.title = open ? 'Collapse this event' : 'Expand to line up this event';
+
+    const chevron = document.createElement('span');
+    chevron.className = 'collapse-chevron';
+    chevron.setAttribute('aria-hidden', 'true');
+    chevron.textContent = '▾';
+    head.querySelector('.card-head-top').appendChild(chevron);
+
+    const { filled, total } = fillSummary(ev);
+    const waiting = unplacedSignups(ev).length;
+    const summary = document.createElement('div');
+    summary.className = 'card-head-summary' + (total > 0 && filled >= total ? ' full' : '');
+    const slotsText = total > 0 ? `${filled} / ${total} slots filled` : 'No slots set yet';
+    summary.textContent = `${slotsText}  ·  ${waiting} in pool`;
+    head.appendChild(summary);
+
+    const toggle = () => {
+      const nowOpen = wrapper.classList.contains('collapsed');
+      wrapper.classList.toggle('collapsed', !nowOpen);
+      head.setAttribute('aria-expanded', String(nowOpen));
+      head.title = nowOpen ? 'Collapse this event' : 'Expand to line up this event';
+      if (nowOpen) expandedEvents.add(ev._id);
+      else expandedEvents.delete(ev._id);
+    };
+    head.addEventListener('click', toggle);
+    head.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault(); // Space would otherwise scroll the page
+        toggle();
+      }
+    });
+  }
 
   let allActiveEvents = [];
   let allMarshals = [];
@@ -412,16 +541,26 @@
       poolScrollByEventId[el.dataset.eventId] = el.scrollTop;
     });
 
+    renderTypeFilterOptions();
+
     createListGrid.innerHTML = '';
     if (allActiveEvents.length === 0) {
       createListGrid.innerHTML = '<div class="empty-state">No active events yet. Add one under "Generate Event".</div>';
       return;
     }
-    allActiveEvents.forEach((ev) => {
+    const visibleEvents = eventsForFilter();
+    if (visibleEvents.length === 0) {
+      const label = createListFilter === UNTYPED_FILTER ? 'untyped' : escapeHtml(createListFilter);
+      createListGrid.innerHTML = `<div class="empty-state">No active ${label} events. Pick another team, or "All Events".</div>`;
+      return;
+    }
+    visibleEvents.forEach((ev) => {
       const wrapper = document.createElement('div');
       wrapper.className = 'event-card-wrapper';
-      wrapper.appendChild(buildEventCard(ev, { editable: true }));
+      const card = buildEventCard(ev, { editable: true });
+      wrapper.appendChild(card);
       wrapper.appendChild(buildPoolCard(ev));
+      makeCollapsible(wrapper, card, ev);
       createListGrid.appendChild(wrapper);
     });
 
@@ -669,13 +808,19 @@
       ? `<span class="type-tag" title="${escapeHtml(ev.eventType)} event — its entries and roles come from this type">${escapeHtml(ev.eventType)}</span>`
       : `<span class="type-tag untyped" title="Saved before event types existed, so it still shows every entry and every role. Set a type below to fix that.">Untyped</span>`;
 
-    const dayLabel = ev.dayName ? `${escapeHtml(ev.dayName)}, ` : '';
+    // A consecutive-day event reads "Wednesday – Friday, 9/16 – 9/18/2026 (3 days)".
+    const dayText = dayRangeName(ev);
+    const dayLabel = dayText ? `${escapeHtml(dayText)}, ` : '';
+    const dayCountText = ev.dayCount > 1 ? ` (${ev.dayCount} days)` : '';
     head.innerHTML =
       `<div class="card-head-top"><h3>${escapeHtml(ev.name)}</h3>` +
       `<span class="card-head-tags">${typeTag}` +
       `<span class="${tagClass}" title="${tagTitle}">${tagText}</span></span></div>` +
-      `<div class="meta">${dayLabel}${formatDate(ev.date)} &nbsp;•&nbsp; ${escapeHtml(ev.location)}</div>`;
+      `<div class="meta">${dayLabel}${formatDateRange(ev.date, ev.endDate)}${dayCountText} &nbsp;•&nbsp; ${escapeHtml(ev.location)}</div>`;
     card.appendChild(head);
+
+    // Edit Event Details (name / dates / location) opens right under the head.
+    if (editable && editingEvents.has(ev._id)) card.appendChild(buildEditDetailsPanel(ev));
 
     // Untyped events get a one-time picker. Setting the type narrows the card
     // to that type's entries and roles; anyone already lined up in a role the
@@ -727,6 +872,16 @@
     const footer = document.createElement('div');
     footer.className = 'card-footer';
 
+    if (editable) {
+      const editBtn = document.createElement('button');
+      editBtn.type = 'button';
+      editBtn.className = 'btn-secondary edit-details-btn';
+      editBtn.textContent = 'Edit Details';
+      editBtn.title = 'Change the event name, date(s) or location';
+      editBtn.addEventListener('click', () => openEditDetails(ev));
+      footer.appendChild(editBtn);
+    }
+
     const announceBtn = document.createElement('button');
     announceBtn.className = 'btn-secondary';
     announceBtn.textContent = 'Generate Announcement';
@@ -739,6 +894,13 @@
     pdfBtn.title = 'Download the marshal list as a PDF, laid out like the ITEMHOUND template';
     pdfBtn.addEventListener('click', () => exportEventPdf(ev, pdfBtn));
     footer.appendChild(pdfBtn);
+
+    const attendanceBtn = document.createElement('button');
+    attendanceBtn.className = 'btn-secondary';
+    attendanceBtn.textContent = 'Create Attendance Sheet';
+    attendanceBtn.title = 'Download the attendance sheet (Excel) with the event, date, names and roles filled in';
+    attendanceBtn.addEventListener('click', () => exportAttendanceSheet(ev, attendanceBtn));
+    footer.appendChild(attendanceBtn);
 
     if (editable) {
       const completeBtn = document.createElement('button');
@@ -762,6 +924,153 @@
 
     card.appendChild(footer);
     return card;
+  }
+
+  // ---- Edit Event Details --------------------------------------------------
+  //
+  // Name, date(s) and location live in the card head, where they aren't
+  // editable in place, so they get their own small form. Open forms and what
+  // has been typed into them are kept in `editingEvents` (eventId -> draft):
+  // every assign/unassign rebuilds the grid, and a half-typed edit must not
+  // vanish because someone was dragged into a slot meanwhile.
+  //
+  // Moving an event onto a weekend is where this can go wrong -- people lined
+  // up while it was a weekday event were never checked against the weekend
+  // rule. The server refuses that save and names who clashes; the message is
+  // shown in the form so the admin can fix it and try again.
+  const editingEvents = new Map();
+
+  function openEditDetails(ev) {
+    if (!editingEvents.has(ev._id)) {
+      editingEvents.set(ev._id, { name: ev.name || '', date: ev.date || '', endDate: ev.endDate || '', location: ev.location || '' });
+      renderCreateList();
+    }
+    const nameInput = document.getElementById(`editName_${ev._id}`);
+    if (nameInput) {
+      nameInput.closest('.edit-details').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      nameInput.focus();
+    }
+  }
+
+  function closeEditDetails(eventId) {
+    editingEvents.delete(eventId);
+    renderCreateList();
+  }
+
+  function buildEditDetailsPanel(ev) {
+    const draft = editingEvents.get(ev._id);
+    const form = document.createElement('form');
+    form.className = 'edit-details';
+    form.setAttribute('aria-label', `Edit details for ${ev.name}`);
+
+    const title = document.createElement('p');
+    title.className = 'edit-details-title';
+    title.textContent = 'Edit event details';
+    form.appendChild(title);
+
+    const grid = document.createElement('div');
+    grid.className = 'edit-details-grid';
+    form.appendChild(grid);
+
+    const field = (labelText, forId, control, extraClass) => {
+      const wrap = document.createElement('div');
+      wrap.className = 'field' + (extraClass ? ` ${extraClass}` : '');
+      const label = document.createElement('label');
+      label.textContent = labelText;
+      label.setAttribute('for', forId);
+      wrap.appendChild(label);
+      wrap.appendChild(control);
+      grid.appendChild(wrap);
+    };
+
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.id = `editName_${ev._id}`;
+    nameInput.required = true;
+    nameInput.value = draft.name;
+    nameInput.addEventListener('input', () => { draft.name = nameInput.value; });
+    field('Event Name', nameInput.id, nameInput, 'span-2');
+
+    const range = buildDateRangeInputs({
+      startId: `editDate_${ev._id}`,
+      endId: `editEndDate_${ev._id}`,
+      startValue: draft.date,
+      endValue: draft.endDate,
+      allowRange: Boolean(ev.allowsMultiDay),
+    });
+    range.start.addEventListener('input', () => { draft.date = range.start.value; draft.endDate = range.end ? range.end.value : ''; });
+    if (range.end) range.end.addEventListener('input', () => { draft.endDate = range.end.value; });
+    field(ev.allowsMultiDay ? 'Date(s)' : 'Date', range.start.id, range.el);
+
+    const locInput = document.createElement('input');
+    locInput.type = 'text';
+    locInput.id = `editLocation_${ev._id}`;
+    locInput.required = true;
+    locInput.value = draft.location;
+    locInput.addEventListener('input', () => { draft.location = locInput.value; });
+    field('Location', locInput.id, locInput);
+
+    const errorBox = document.createElement('div');
+    errorBox.className = 'alert alert-error edit-details-error';
+    errorBox.setAttribute('role', 'alert');
+    errorBox.hidden = true;
+    form.appendChild(errorBox);
+
+    const actions = document.createElement('div');
+    actions.className = 'edit-details-actions';
+    const saveBtn = document.createElement('button');
+    saveBtn.type = 'submit';
+    saveBtn.className = 'btn-primary btn-small';
+    saveBtn.textContent = 'Save Details';
+    const cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.className = 'btn-outline btn-small';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.addEventListener('click', () => closeEditDetails(ev._id));
+    actions.appendChild(saveBtn);
+    actions.appendChild(cancelBtn);
+    form.appendChild(actions);
+
+    form.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); closeEditDetails(ev._id); }
+    });
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errorBox.hidden = true;
+      if (!form.reportValidity()) return;
+      const body = {
+        name: nameInput.value.trim(),
+        date: range.start.value,
+        endDate: range.end ? range.end.value : '',
+        location: locInput.value.trim(),
+      };
+      if (!body.name || !body.location) {
+        errorBox.textContent = 'Event name and location can\'t be empty.';
+        errorBox.hidden = false;
+        return;
+      }
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving…';
+      try {
+        const { event } = await apiRequest(`/admin/events/${ev._id}`, { method: 'PUT', body });
+        editingEvents.delete(ev._id);
+        const idx = allActiveEvents.findIndex((x) => x._id === event._id);
+        if (idx >= 0) allActiveEvents[idx] = event;
+        // A new date can move the card; keep the list in date order.
+        allActiveEvents.sort((a, b) => String(a.date).localeCompare(String(b.date)));
+        buildAssignedMap();
+        renderCreateList();
+        showToast('Event details saved.', 'success');
+      } catch (err) {
+        errorBox.textContent = err.message;
+        errorBox.hidden = false;
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save Details';
+      }
+    });
+
+    return form;
   }
 
   function detailRow(label, field, ev, editable) {
@@ -945,14 +1254,20 @@
 
   // Builds the small, always-visible card that sits beside the main event
   // card listing marshals signed up for this event.
-  function buildPoolCard(ev) {
+  // Marshals signed up for this event who aren't placed in any of its slots
+  // yet -- the ones the pool card lists. Shared with the collapsed card's
+  // summary line so the two counts can't disagree.
+  function unplacedSignups(ev) {
     const candidates = allMarshals.filter((m) => (m.events || []).some((id) => String(id) === String(ev._id)));
-
     // Exclude marshals already placed in THIS event's slots (they show in the role slot instead).
     const placedHereIds = new Set(
-      ALL_ROLES.flatMap((role) => (ev.assignments[role] || []).map((a) => String(a.marshalId)))
+      ALL_ROLES.flatMap((role) => ((ev.assignments || {})[role] || []).map((a) => String(a.marshalId)))
     );
-    const visible = candidates.filter((m) => !placedHereIds.has(String(m._id)));
+    return candidates.filter((m) => !placedHereIds.has(String(m._id)));
+  }
+
+  function buildPoolCard(ev) {
+    const visible = unplacedSignups(ev);
 
     const poolCard = document.createElement('div');
     poolCard.className = 'pool-card';
@@ -1309,10 +1624,11 @@
     const item = document.createElement('div');
     item.className = 'attendance-item';
     const roleNote = a.note ? `${escapeHtml(a.role)} (${escapeHtml(a.note)})` : escapeHtml(a.role);
-    const lineText = `${a.eventName} — ${formatDate(a.date)} · ${a.role}${a.note ? ` (${a.note})` : ''}`;
+    const when = formatDateRange(a.date, a.endDate);
+    const lineText = `${a.eventName} — ${when} · ${a.role}${a.note ? ` (${a.note})` : ''}`;
     item.innerHTML = `<span class="ev-line" title="${escapeHtml(lineText)}">` +
         `<span class="ev-name">${escapeHtml(a.eventName)}</span>` +
-        `<span class="ev-meta"> · ${formatDate(a.date)} · ${roleNote}</span>` +
+        `<span class="ev-meta"> · ${when} · ${roleNote}</span>` +
       `</span>` +
       `<span class="status-pill ${a.status}">${a.status}</span>`;
     return item;
@@ -1507,12 +1823,32 @@
   }
 
   // ---------------- PDF export ----------------
-  async function exportEventPdf(ev, btn) {
+  function exportEventPdf(ev, btn) {
+    return downloadFromApi(`/api/admin/events/${ev._id}/pdf`, btn, {
+      fallbackName: `${ev.name} MARSHALS LIST.pdf`,
+      done: 'PDF exported.',
+    });
+  }
+
+  // The team's attendance sheet template filled with this lineup (Event,
+  // Date, full name + role per row; everything else blank for the day), as
+  // "<Event Name>-Attendance Sheet.xlsx". One sheet per day for a
+  // consecutive-day event.
+  function exportAttendanceSheet(ev, btn) {
+    return downloadFromApi(`/api/admin/events/${ev._id}/attendance-sheet`, btn, {
+      fallbackName: `${ev.name}-Attendance Sheet.xlsx`,
+      done: 'Attendance sheet created.',
+    });
+  }
+
+  // Fetches a file the server builds (PDF, xlsx) and saves it under the name
+  // the server sends. Errors arrive as JSON and surface as a toast.
+  async function downloadFromApi(path, btn, { fallbackName, done }) {
     const original = btn.textContent;
     btn.disabled = true;
     btn.textContent = 'Preparing…';
     try {
-      const res = await fetch(`/api/admin/events/${ev._id}/pdf`, {
+      const res = await fetch(path, {
         headers: { Authorization: `Bearer ${Auth.getToken()}` },
       });
 
@@ -1526,8 +1862,7 @@
       }
 
       const blob = await res.blob();
-      const name = filenameFromDisposition(res.headers.get('Content-Disposition'))
-        || `${ev.name} MARSHALS LIST.pdf`;
+      const name = filenameFromDisposition(res.headers.get('Content-Disposition')) || fallbackName;
 
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -1539,7 +1874,7 @@
       // Revoked on a delay: Safari needs the object URL alive past the click.
       setTimeout(() => URL.revokeObjectURL(url), 5000);
 
-      showToast('PDF exported.', 'success');
+      showToast(done, 'success');
     } catch (err) {
       showToast(err.message, 'error');
     } finally {
@@ -1606,11 +1941,28 @@
    * server already derived.
    */
   function announcementDate(ev) {
-    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(cleanValue(ev.date));
-    if (!m) return cleanValue(ev.date);
-    const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-    if (Number.isNaN(d.getTime())) return cleanValue(ev.date);
+    const parse = (raw) => {
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(cleanValue(raw));
+      if (!m) return null;
+      const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+      return Number.isNaN(d.getTime()) ? null : d;
+    };
+    const d = parse(ev.date);
+    if (!d) return cleanValue(ev.date);
     const day = ev.dayName || d.toLocaleDateString('en-US', { weekday: 'long' });
+
+    // Consecutive days: "Wednesday, September 16 – Friday, September 18, 2026".
+    const end = parse(ev.endDate);
+    if (end && end > d) {
+      const endDay = ev.endDayName || end.toLocaleDateString('en-US', { weekday: 'long' });
+      const sameYear = end.getFullYear() === d.getFullYear();
+      const first = d.toLocaleDateString('en-US', sameYear
+        ? { month: 'long', day: 'numeric' }
+        : { month: 'long', day: 'numeric', year: 'numeric' });
+      const last = end.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+      return `${day}, ${first} – ${endDay}, ${last}`;
+    }
+
     const rest = d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
     return `${day}, ${rest}`;
   }
@@ -1754,6 +2106,164 @@
     const date = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(d);
     if (isNaN(date.getTime())) return d;
     return date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' });
+  }
+
+  // ---------------- Consecutive-day dates ----------------
+  //
+  // Non-Timing events can run over several consecutive WEEKDAYS: `date` is the
+  // first day, `endDate` the last ('' for a one-day event). These mirror
+  // server/config/schedule.js so the form can answer instantly -- the server
+  // re-checks everything and is the one that decides.
+  const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+  function parseYMD(str) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(str || '').trim());
+    if (!m) return null;
+    const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+    if (d.getUTCMonth() !== Number(m[2]) - 1 || d.getUTCDate() !== Number(m[3])) return null;
+    return d;
+  }
+  const ymdOf = (d) => d.toISOString().slice(0, 10);
+  const addDaysYMD = (str, n) => ymdOf(new Date(parseYMD(str).getTime() + n * 86400000));
+
+  // { endDate, dayCount } or { error } -- same wording as the server.
+  function checkWeekdayRange(startStr, endStr) {
+    const start = parseYMD(startStr);
+    if (!start) return { error: 'Pick a valid date.' };
+    const end = String(endStr || '').trim();
+    if (!end || end === startStr) return { endDate: '', dayCount: 1 };
+    const last = parseYMD(end);
+    if (!last) return { error: 'Pick a valid end date.' };
+    if (last < start) return { error: 'The end date is before the start date.' };
+    let count = 0;
+    for (let t = start.getTime(); t <= last.getTime(); t += 86400000) {
+      const dt = new Date(t);
+      const day = dt.getUTCDay();
+      if (day === 0 || day === 6) {
+        return { error: `Consecutive days are for weekday events only — ${WEEKDAY_NAMES[day]} ${dt.getUTCMonth() + 1}/${dt.getUTCDate()}/${dt.getUTCFullYear()} is a weekend. Keep the range within one Monday–Friday week.` };
+      }
+      count += 1;
+    }
+    return { endDate: end, dayCount: count };
+  }
+
+  // "9/16/2026" or, for a range, "9/16 – 9/18/2026" (year written once unless
+  // the range crosses into a new year).
+  function formatDateRange(start, end) {
+    const a = parseYMD(start);
+    const b = parseYMD(end);
+    if (!a || !b || b <= a) return formatDate(start);
+    if (a.getUTCFullYear() !== b.getUTCFullYear()) return `${formatDate(start)} – ${formatDate(end)}`;
+    return `${a.getUTCMonth() + 1}/${a.getUTCDate()} – ${formatDate(end)}`;
+  }
+
+  // "Wednesday – Friday" for a range, else the single day name.
+  function dayRangeName(ev) {
+    if (ev.endDate && ev.endDayName && ev.endDate !== ev.date) return `${ev.dayName} – ${ev.endDayName}`;
+    return ev.dayName || '';
+  }
+
+  /**
+   * The start/end date pair used by BOTH Generate Event and Edit Event
+   * Details. With `allowRange` false (Timing, untyped) it is just the one date
+   * input, exactly as before. Otherwise an optional end date sits beside it:
+   * limited to the rest of that Monday–Friday week, disabled when the start
+   * falls on a weekend (weekend events are one day), and checked live with
+   * the reason shown in the hint and set as the input's validity message so a
+   * bad range can't be submitted.
+   *
+   * Returns { el, start, end, hint } -- `end` is null without a range.
+   */
+  function buildDateRangeInputs({ startId, endId, hintId, startValue, endValue, allowRange, genFields }) {
+    const el = document.createElement('div');
+    el.className = 'date-range';
+
+    const row = document.createElement('div');
+    row.className = 'date-range-row';
+    el.appendChild(row);
+
+    const start = document.createElement('input');
+    start.type = 'date';
+    start.id = startId;
+    start.required = true;
+    if (genFields) start.dataset.genField = 'date';
+    if (startValue) start.value = startValue;
+    row.appendChild(start);
+
+    let end = null;
+    if (allowRange) {
+      const to = document.createElement('span');
+      to.className = 'date-range-to';
+      to.textContent = 'to';
+      row.appendChild(to);
+
+      end = document.createElement('input');
+      end.type = 'date';
+      end.id = endId;
+      end.setAttribute('aria-label', 'End date (optional, consecutive weekdays)');
+      if (genFields) end.dataset.genField = 'endDate';
+      if (endValue) end.value = endValue;
+      row.appendChild(end);
+    }
+
+    const hint = document.createElement('p');
+    hint.className = 'field-hint';
+    if (hintId) hint.id = hintId;
+    el.appendChild(hint);
+
+    const paint = () => {
+      const d = parseYMD(start.value);
+      if (end) end.setCustomValidity('');
+      if (!d) {
+        hint.textContent = allowRange ? 'Add an end date too if it runs over consecutive weekdays.' : '';
+        hint.className = 'field-hint';
+        if (end) { end.disabled = false; end.removeAttribute('min'); end.removeAttribute('max'); }
+        return;
+      }
+      const day = d.getUTCDay();
+      const weekend = day === 0 || day === 6;
+
+      if (end) {
+        if (weekend) {
+          end.value = '';
+          end.disabled = true;
+        } else {
+          end.disabled = false;
+          end.min = start.value;
+          end.max = addDaysYMD(start.value, 5 - day); // that week's Friday
+        }
+      }
+
+      if (weekend) {
+        hint.textContent = `${WEEKDAY_NAMES[day]} — weekend event: each marshal can hold only one weekend event.` +
+          (allowRange ? ' Weekend events are one day only.' : '');
+        hint.className = 'field-hint field-hint-weekend';
+        return;
+      }
+
+      const range = end ? checkWeekdayRange(start.value, end.value) : { endDate: '', dayCount: 1 };
+      if (range.error) {
+        hint.textContent = range.error;
+        hint.className = 'field-hint field-hint-error';
+        end.setCustomValidity(range.error);
+        return;
+      }
+      if (range.dayCount > 1) {
+        const last = WEEKDAY_NAMES[parseYMD(range.endDate).getUTCDay()];
+        hint.textContent = `${WEEKDAY_NAMES[day]} – ${last}, ${range.dayCount} days — weekday event: marshals can be lined up on several of these.`;
+      } else {
+        hint.textContent = `${WEEKDAY_NAMES[day]} — weekday event: marshals can be lined up on several of these.`;
+      }
+      hint.className = 'field-hint';
+    };
+    start.addEventListener('input', paint);
+    start.addEventListener('change', paint);
+    if (end) {
+      end.addEventListener('input', paint);
+      end.addEventListener('change', paint);
+    }
+    paint();
+    return { el, start, end, hint };
   }
 
   // Re-tint on a theme flip: the rating ramp is baked into inline styles at

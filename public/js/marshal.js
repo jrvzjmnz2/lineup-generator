@@ -120,7 +120,9 @@
       const evGrid = document.createElement('div');
       evGrid.className = 'checkbox-grid';
       groupEvents.forEach((ev) => {
-        const label = `${ev.name} — ${formatDate(ev.date)} — ${ev.location}`;
+        // A consecutive-day event shows its whole range: "9/16/2026 – 9/18/2026".
+        const when = ev.endDate ? `${formatDate(ev.date)} – ${formatDate(ev.endDate)}` : formatDate(ev.date);
+        const label = `${ev.name} — ${when} — ${ev.location}`;
         evGrid.appendChild(checkItem(`ev_${ev._id}`, 'events', ev._id, label));
       });
       box.appendChild(evGrid);

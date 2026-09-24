@@ -29,11 +29,13 @@ const EVENT_TYPES = [
     name: 'Kit Claiming',
     fields: ['teamLeader', 'offsiteSupport', 'categories', 'lanes', 'callTime'],
     roles: ['Onsite Support', 'Walk-ins', 'Kit Claiming Staff', 'Tech Support'],
+    multiDay: true,
   },
   {
     name: 'Fulfillment',
     fields: ['teamLeader', 'callTime'],
     roles: ['Fulfillment'],
+    multiDay: true,
   },
   {
     name: 'Timing',
@@ -45,6 +47,7 @@ const EVENT_TYPES = [
     name: 'Entractiv',
     fields: ['teamLeader', 'callTime'],
     roles: ['Registration Staff', 'Tech Support', 'Walk-ins'],
+    multiDay: true,
   },
   {
     // Same shape as Fulfillment, tracked separately so the two show up as
@@ -52,6 +55,7 @@ const EVENT_TYPES = [
     name: 'Bib Production',
     fields: ['teamLeader', 'callTime'],
     roles: ['Bib Production'],
+    multiDay: true,
   },
 ];
 
@@ -102,6 +106,16 @@ function hasLogistics(name) {
 }
 
 /**
+ * Can this type run over several consecutive (weekday) days? Every type except
+ * Timing -- a race is one day. Untyped legacy events can't: set a type first.
+ * The range itself is checked by validateWeekdayRange() in config/schedule.js.
+ */
+function allowsMultiDay(name) {
+  const cfg = typeConfig(name);
+  return Boolean(cfg && cfg.multiDay);
+}
+
+/**
  * The roles this type can line up. Untyped events keep all of them, for the
  * same reason fieldsFor does.
  */
@@ -120,5 +134,6 @@ module.exports = {
   typeConfig,
   fieldsFor,
   hasLogistics,
+  allowsMultiDay,
   rolesFor,
 };

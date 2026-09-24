@@ -4,9 +4,10 @@ const Marshal = require('../models/Marshal');
 const Exemption = require('../models/Exemption');
 const Employee = require('../models/Employee');
 const { renderToBuffer, fileNameFor } = require('../services/marshalListPdf');
+const { buildAttendanceWorkbook, attendanceFileName } = require('../services/attendanceSheet');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { ALL_ROLES, ROLES_WITH_EVENT_CAPACITY } = require('../config/roles');
-const { isWeekendDate, dayName } = require('../config/schedule');
+const { isWeekendDate, dayName, dayOfWeek, validateWeekdayRange } = require('../config/schedule');
 const {
   EVENT_TYPE_NAMES,
   BASE_FIELDS,
@@ -15,6 +16,7 @@ const {
   fieldsFor,
   rolesFor,
   hasLogistics,
+  allowsMultiDay,
 } = require('../config/eventTypes');
 
 const router = express.Router();
@@ -92,6 +94,80 @@ function buildDefaultCapacities(roleCounts, allowedRoleList) {
   return capacities;
 }
 
+// Validates the optional `endDate` of a consecutive-day event. Returns
+// { endDate } (normalised: '' for a one-day event) or { error }.
+function checkEndDate(eventType, startDate, rawEndDate) {
+  const end = String(rawEndDate || '').trim();
+  if (!end) return { endDate: '' };
+  if (!allowsMultiDay(eventType)) {
+    return {
+      error: eventType
+        ? `${eventType} events are one day only — leave the end date empty.`
+        : 'Set an event type before giving this event more than one day.',
+    };
+  }
+  const r = validateWeekdayRange(startDate, end);
+  return r.error ? { error: r.error } : { endDate: r.endDate };
+}
+
+// "9/19/2026" for messages, built from the parts (see config/schedule.js on
+// why new Date(str) is avoided).
+function shortDate(dateStr) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(dateStr || ''));
+  return m ? `${Number(m[2])}/${Number(m[3])}/${m[1]}` : String(dateStr || '');
+}
+
+// Who would break the weekend one-event rule if THIS event became a weekend
+// event. Used when an edit moves an active event from a weekday onto a
+// Saturday/Sunday -- the assign route never saw those placements as weekend
+// ones, so nothing checked them. Two ways to clash, same as the assign route:
+//   * already on another active weekend event
+//   * holding more than one role on this event (fine on a weekday, one weekend
+//     event too many once it's a weekend)
+// Exempt (star) marshals and employees are never clashes.
+async function weekendClashesIfMoved(event) {
+  const exemptIds = await getExemptMarshalIdSet();
+
+  const here = new Map(); // marshalId -> { name, roles }
+  const assignments = event.assignments || new Map();
+  for (const [role, list] of assignments) {
+    for (const a of list || []) {
+      if (a.kind === 'employee') continue;
+      const id = String(a.marshalId);
+      if (exemptIds.has(id)) continue;
+      if (!here.has(id)) here.set(id, { name: a.name, roles: [] });
+      here.get(id).roles.push(role);
+    }
+  }
+  if (!here.size) return [];
+
+  // Every OTHER active weekend event, scanned once.
+  const elsewhere = new Map(); // marshalId -> { role, eventName, eventDate }
+  const others = await Event.find({ status: 'active', _id: { $ne: event._id } }).lean();
+  for (const ev of others) {
+    if (!isWeekendDate(ev.date)) continue;
+    for (const role of Object.keys(ev.assignments || {})) {
+      for (const a of ev.assignments[role] || []) {
+        if (a.kind === 'employee') continue;
+        const id = String(a.marshalId);
+        if (!elsewhere.has(id)) elsewhere.set(id, { role, eventName: ev.name, eventDate: ev.date });
+      }
+    }
+  }
+
+  const clashes = [];
+  for (const [id, info] of here) {
+    const other = elsewhere.get(id);
+    if (other) {
+      const when = dayName(other.eventDate);
+      clashes.push({ marshalId: id, name: info.name, reason: `already ${other.role} on "${other.eventName}"${when ? `, ${when}` : ''}` });
+    } else if (info.roles.length > 1) {
+      clashes.push({ marshalId: id, name: info.name, reason: `in ${info.roles.length} roles here: ${info.roles.join(', ')}` });
+    }
+  }
+  return clashes;
+}
+
 // Build a marshalId -> [{ eventId, eventName, date, location, role, note, status }] map
 // by scanning every event's assignments, regardless of active/completed status.
 async function buildAttendanceMap() {
@@ -108,6 +184,7 @@ async function buildAttendanceMap() {
           eventId: ev._id,
           eventName: ev.name,
           date: ev.date,
+          endDate: ev.endDate || '',
           location: ev.location,
           role,
           note: a.note || '',
@@ -132,6 +209,7 @@ router.get('/event-types', (req, res) => {
     fields: fieldsFor(name),
     roles: rolesFor(name),
     hasLogistics: hasLogistics(name),
+    multiDay: allowsMultiDay(name),
   }));
   res.json({ types, baseFields: BASE_FIELDS, logisticsFields: LOGISTICS_FIELDS });
 });
@@ -170,6 +248,11 @@ router.post('/events', async (req, res) => {
       const raw = req.body[field];
       doc[field] = typeof raw === 'string' ? raw.trim() : (raw || '');
     }
+
+    // Consecutive days: every type except Timing, weekdays only.
+    const endCheck = checkEndDate(eventType, doc.date, req.body.endDate);
+    if (endCheck.error) return res.status(400).json({ error: endCheck.error });
+    doc.endDate = endCheck.endDate;
 
     const event = await Event.create(doc);
     res.status(201).json({ event: event.toCard() });
@@ -226,7 +309,12 @@ router.get('/events', async (req, res) => {
   const month = parseInt(req.query.month, 10);
   if (Number.isInteger(year) && Number.isInteger(month) && month >= 1 && month <= 12) {
     const monthPrefix = `${year}-${String(month).padStart(2, '0')}`;
-    query.date = { $regex: `^${monthPrefix}` };
+    // A consecutive-day event that starts on the 30th and ends on the 2nd
+    // belongs to both months, so match on either end of the range.
+    query.$or = [
+      { date: { $regex: `^${monthPrefix}` } },
+      { endDate: { $regex: `^${monthPrefix}` } },
+    ];
   }
 
   const events = await Event.find(query).sort({ date: 1, createdAt: 1 });
@@ -306,17 +394,62 @@ router.put('/marshals/:id/rating', async (req, res) => {
 // document first (rather than findByIdAndUpdate) so the type is known before
 // deciding what's editable. An untyped event still gets every field, same as
 // before types existed.
+//
+// Also the "Edit Event Details" save (name / date / endDate / location):
+//   * name, date and location can't be blanked
+//   * endDate only on multi-day types, and the range must be weekdays only
+//   * moving an ACTIVE event from a weekday onto a weekend is refused (409)
+//     if it would double-book anyone -- the 409 carries `clashes`
+const has = (obj, key) => Object.prototype.hasOwnProperty.call(obj || {}, key);
+const BASE_LABELS = { name: 'Event name', date: 'Date', location: 'Location' };
+
 router.put('/events/:id', async (req, res) => {
   try {
     const event = await Event.findById(req.params.id);
     if (!event) return res.status(404).json({ error: 'Event not found' });
+    const body = req.body || {};
+
+    for (const f of BASE_FIELDS) {
+      if (has(body, f) && String(body[f] == null ? '' : body[f]).trim() === '') {
+        return res.status(400).json({ error: `${BASE_LABELS[f] || f} can't be empty.` });
+      }
+    }
+
+    const nextDate = has(body, 'date') ? String(body.date).trim() : event.date;
+    const dateChanged = has(body, 'date') && nextDate !== event.date;
+    if (dateChanged && dayOfWeek(nextDate) === null) {
+      return res.status(400).json({ error: 'Pick a valid date.' });
+    }
+
+    // Re-check the range whenever either end of it moves.
+    let nextEnd = event.endDate || '';
+    const rangeTouched = has(body, 'endDate') || dateChanged;
+    if (rangeTouched) {
+      const endCheck = checkEndDate(event.eventType, nextDate, has(body, 'endDate') ? body.endDate : event.endDate);
+      if (endCheck.error) return res.status(400).json({ error: endCheck.error });
+      nextEnd = endCheck.endDate;
+    }
+
+    if (dateChanged && event.status === 'active' && isWeekendDate(nextDate) && !isWeekendDate(event.date)) {
+      const clashes = await weekendClashesIfMoved(event);
+      if (clashes.length) {
+        const who = clashes.map((c) => `${c.name} (${c.reason})`).join('; ');
+        return res.status(409).json({
+          error: `Can't move "${event.name}" to ${dayName(nextDate)} ${shortDate(nextDate)} — that makes it a weekend event, and ${clashes.length} marshal${clashes.length === 1 ? '' : 's'} would be double-booked: ${who}. Take them off one of the events or \u2605 exempt them first.`,
+          clashes,
+        });
+      }
+    }
 
     const editableFields = fieldsFor(event.eventType);
     for (const field of editableFields) {
-      if (Object.prototype.hasOwnProperty.call(req.body, field)) {
-        event[field] = req.body[field];
+      if (has(body, field)) {
+        const raw = body[field];
+        event[field] = BASE_FIELDS.includes(field) ? String(raw).trim() : raw;
       }
     }
+    if (rangeTouched) event.endDate = nextEnd;
+
     await event.save();
     res.json({ event: event.toCard() });
   } catch (err) {
@@ -599,6 +732,36 @@ router.get('/events/:id/pdf', async (req, res) => {
 });
 
 // ---------- exemptions (per-lineup-cycle) ----------
+
+// GET /api/admin/events/:id/attendance-sheet -- the team's attendance sheet
+// template (server/templates/attendance-sheet.xlsx) filled with this event's
+// lineup: Event, Date, and one row per assignment (full name + role). Every
+// other column is left blank for the day. A consecutive-day event gets one
+// sheet per day. Built into a Buffer before anything is sent, like the PDF.
+router.get('/events/:id/attendance-sheet', async (req, res) => {
+  try {
+    const event = await Event.findById(req.params.id);
+    if (!event) return res.status(404).json({ error: 'Event not found' });
+
+    const card = event.toCard();
+    // Same role list, in the same order, as the card, announcement and PDF.
+    const roles = [...(card.typeRoles || []), ...(card.extraRoles || [])];
+    const buffer = buildAttendanceWorkbook(card, roles.length ? roles : ALL_ROLES);
+    const name = attendanceFileName(card);
+    const asciiName = name.replace(/[^\x20-\x7E]/g, '_');
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(name)}`
+    );
+    res.setHeader('Content-Length', buffer.length);
+    res.send(buffer);
+  } catch (err) {
+    console.error('Attendance sheet error:', err);
+    res.status(500).json({ error: `Could not build the attendance sheet: ${err.message}` });
+  }
+});
 
 // GET /api/admin/exemptions -- marshalIds currently exempt from the
 // single-active-event rule, for this lineup cycle.
