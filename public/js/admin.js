@@ -781,10 +781,15 @@
     btn.type = 'button';
     btn.className = 'btn-secondary btn-small';
     btn.textContent = 'Set type';
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       if (!select.value) return showToast('Pick a type first.', 'error');
-      if (!window.confirm(`Set "${ev.name}" to ${select.value}? This cannot be changed afterwards.`)) return;
-      setEventType(ev._id, select.value);
+      const type = select.value;
+      const ok = await confirmDialog({
+        title: `Set type to ${type}?`,
+        message: `"${ev.name}" becomes a ${type} event. This cannot be changed afterwards.`,
+        confirmText: 'Set type',
+      });
+      if (ok) setEventType(ev._id, type);
     });
     row.appendChild(btn);
 
@@ -1652,7 +1657,13 @@
   }
 
   async function completeEvent(eventId) {
-    if (!confirm('Mark this event as complete? It will move to All Events.')) return;
+    const ev = allActiveEvents.find((e) => e._id === eventId);
+    const ok = await confirmDialog({
+      title: 'Complete this event?',
+      message: `${ev ? `"${ev.name}"` : 'This event'} moves to All Events. You can reopen it from there.`,
+      confirmText: 'Complete Event',
+    });
+    if (!ok) return;
     try {
       await apiRequest(`/admin/events/${eventId}/complete`, { method: 'POST' });
       showToast('Event completed and moved to All Events.', 'success');
@@ -1674,7 +1685,14 @@
   }
 
   async function deleteEvent(eventId, { fromCompleted } = {}) {
-    if (!confirm('Delete this event permanently? This cannot be undone, and any marshals placed on it will become available for other events again.')) return;
+    const ev = (fromCompleted ? allEventsData : allActiveEvents).find((e) => e._id === eventId);
+    const ok = await confirmDialog({
+      title: 'Delete this event?',
+      message: `${ev ? `"${ev.name}"` : 'This event'} is deleted permanently. This cannot be undone, and any marshals placed on it become available for other events again.`,
+      confirmText: 'Delete Event',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await apiRequest(`/admin/events/${eventId}`, { method: 'DELETE' });
       showToast('Event deleted.', 'success');

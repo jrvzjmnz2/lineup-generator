@@ -180,6 +180,67 @@ async function apiRequest(path, { method = 'GET', body } = {}) {
   return data;
 }
 
+// In-page confirmation popup, used instead of the browser's confirm() box.
+// Resolves true when the action is confirmed, false on Cancel, Esc or a
+// click on the backdrop. Built on <dialog>, which traps focus and handles Esc.
+//
+//   if (!(await confirmDialog({ title, message, confirmText, danger: true }))) return;
+//
+// `danger` paints the confirm button red and puts focus on Cancel, so an
+// accidental Enter never deletes anything.
+function confirmDialog({ title = 'Are you sure?', message = '', confirmText = 'Confirm', cancelText = 'Cancel', danger = false } = {}) {
+  return new Promise((resolve) => {
+    const dialog = document.createElement('dialog');
+    dialog.className = 'confirm-dialog' + (danger ? ' danger' : '');
+    dialog.setAttribute('aria-labelledby', 'confirmDialogTitle');
+    // Content sits in an inner box so a click on the dialog element itself
+    // can only be a click on the backdrop around it.
+    const box = document.createElement('div');
+    box.className = 'confirm-dialog-box';
+    dialog.appendChild(box);
+
+    const h = document.createElement('h2');
+    h.id = 'confirmDialogTitle';
+    h.textContent = title;
+    box.appendChild(h);
+
+    if (message) {
+      const p = document.createElement('p');
+      p.className = 'confirm-dialog-message';
+      p.textContent = message;
+      box.appendChild(p);
+    }
+
+    const actions = document.createElement('div');
+    actions.className = 'confirm-dialog-actions';
+    const cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.className = 'btn-outline';
+    cancelBtn.textContent = cancelText;
+    const okBtn = document.createElement('button');
+    okBtn.type = 'button';
+    okBtn.className = danger ? 'btn-danger' : 'btn-primary';
+    okBtn.textContent = confirmText;
+    actions.append(cancelBtn, okBtn);
+    box.appendChild(actions);
+
+    let answer = false;
+    const close = (value) => { answer = value; dialog.close(); };
+    cancelBtn.addEventListener('click', () => close(false));
+    okBtn.addEventListener('click', () => close(true));
+    // Only the backdrop reaches the dialog element itself (see the box above).
+    dialog.addEventListener('click', (e) => { if (e.target === dialog) close(false); });
+    dialog.addEventListener('close', () => {
+      dialog.remove();
+      resolve(answer);
+    });
+
+    document.body.appendChild(dialog);
+    dialog.showModal();
+    (danger ? cancelBtn : okBtn).focus();
+  });
+}
+
 function showToast(message, type = '') {
   const existing = document.querySelector('.toast');
   if (existing) existing.remove();

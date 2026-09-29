@@ -2192,3 +2192,55 @@ label {
 /* Employee sign-up page: the name picker at the top of the form. */
 .signup-name-field { margin-bottom: var(--sp-5); }
 .signup-name-field select { width: 100%; }
+
+/* =========================  CONFIRMATION POPUP  ========================= */
+/* confirmDialog() in js/api.js: replaces the browser's confirm() box. */
+.confirm-dialog {
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-lg);
+  background: var(--surface-card);
+  color: var(--text);
+  box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.45);
+  width: min(440px, calc(100vw - 32px));
+  max-width: none;
+}
+.confirm-dialog::backdrop { background: rgba(37, 54, 62, 0.55); }
+.confirm-dialog[open] { animation: confirm-in 160ms var(--ease); }
+@keyframes confirm-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+.confirm-dialog-box {
+  padding: var(--sp-5) var(--sp-5) var(--sp-4);
+  border-top: 4px solid var(--surface-frame);
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+}
+.confirm-dialog.danger .confirm-dialog-box { border-top-color: var(--maroon); }
+.confirm-dialog h2 {
+  margin: 0 0 var(--sp-3);
+  font-family: var(--font-head);
+  font-size: var(--fs-h2);
+  font-weight: 700;
+  color: var(--text);
+}
+.confirm-dialog-message {
+  margin: 0 0 var(--sp-5);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  color: var(--text);
+}
+.confirm-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+:root[data-theme="dark"] .confirm-dialog::backdrop { background: rgba(0, 0, 0, 0.6); }
+:root[data-theme="dark"] .confirm-dialog.danger .confirm-dialog-box { border-top-color: rgba(217, 217, 217, 0.7); }
+@media (prefers-reduced-motion: reduce) {
+  .confirm-dialog[open] { animation: none; }
+}
+@media (max-width: 560px) {
+  .confirm-dialog-actions > button { flex: 1 1 auto; }
+}
