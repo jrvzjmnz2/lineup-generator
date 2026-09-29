@@ -5,6 +5,8 @@ const User = require('../models/User');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { ALL_ROLES } = require('../config/roles');
 const { EVENT_TYPES, rolesFor, isEventType } = require('../config/eventTypes');
+const { logActivity } = require('../services/activityLog');
+const { properName } = require('../utils/names');
 
 // The label an untyped legacy event is grouped under on the sign-up form.
 const UNTYPED_GROUP = 'Other';
@@ -171,8 +173,8 @@ router.post('/submit', requireAuth, requireRole('marshal'), async (req, res) => 
         $set: {
           userId: user._id,
           username: user.username,
-          firstName: user.firstName,
-          lastName: user.lastName,
+          firstName: properName(user.firstName),
+          lastName: properName(user.lastName),
           email: user.email,
           contactNumber: user.contactNumber,
           events: validEventIds,
@@ -187,6 +189,10 @@ router.post('/submit', requireAuth, requireRole('marshal'), async (req, res) => 
     let removedFrom = [];
     if (validEventIds.length === 0) {
       removedFrom = await removeMarshalFromAllActiveEvents(submission._id);
+      const who = `${submission.firstName} ${submission.lastName}`.trim();
+      for (const r of removedFrom) {
+        await logActivity(req, { action: 'marshal.optout', eventId: r.eventId, eventName: r.eventName, targetName: who, role: r.role });
+      }
     }
 
     res.json({ submission, removedFrom });

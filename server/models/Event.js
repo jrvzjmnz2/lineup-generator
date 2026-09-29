@@ -89,6 +89,11 @@ const eventSchema = new mongoose.Schema(
     // flip it from the card's On/Off switch. Events saved before this existed
     // have no field at all, so every read treats "not explicitly false" as ON.
     signupOpen: { type: Boolean, default: true },
+
+    // Exclusive events are set on the Generate Event form and cannot be
+    // changed later. They sit at the top of Create List with their own card
+    // colour, and start with the sign-up switch OFF.
+    exclusive: { type: Boolean, default: false },
   },
   { timestamps: true, collection: 'events' }
 );
@@ -138,6 +143,7 @@ eventSchema.methods.toCard = function () {
     allowsMultiDay: allowsMultiDay(this.eventType),
     eventType: this.eventType || null,
     signupOpen: this.signupOpen !== false,
+    exclusive: this.exclusive === true,
     typeFields: fieldsFor(this.eventType),
     typeRoles,
     extraRoles,

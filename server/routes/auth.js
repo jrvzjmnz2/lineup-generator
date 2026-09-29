@@ -4,6 +4,7 @@ const jwt = require('jsonwebtoken');
 const { OAuth2Client } = require('google-auth-library');
 const User = require('../models/User');
 const { requireAuth } = require('../middleware/auth');
+const { properName } = require('../utils/names');
 
 const router = express.Router();
 
@@ -81,8 +82,8 @@ router.post('/google', async (req, res) => {
           // they never reach this route in practice.
           if (!user.passwordHash) user.authProvider = 'google';
         }
-        if (!user.firstName && payload.given_name) user.firstName = payload.given_name;
-        if (!user.lastName && payload.family_name) user.lastName = payload.family_name;
+        if (!user.firstName && payload.given_name) user.firstName = properName(payload.given_name);
+        if (!user.lastName && payload.family_name) user.lastName = properName(payload.family_name);
         await user.save();
       }
     }
@@ -93,8 +94,8 @@ router.post('/google', async (req, res) => {
         googleId: payload.sub,
         authProvider: 'google',
         role: 'marshal',
-        firstName: payload.given_name || '',
-        lastName: payload.family_name || '',
+        firstName: properName(payload.given_name),
+        lastName: properName(payload.family_name),
       });
     }
 
@@ -178,8 +179,8 @@ router.put('/profile', requireAuth, async (req, res) => {
       req.user.id,
       {
         $set: {
-          firstName: firstName.trim(),
-          lastName: lastName.trim(),
+          firstName: properName(firstName),
+          lastName: properName(lastName),
           contactNumber: contactNumber.trim(),
         },
       },

@@ -3,6 +3,8 @@ const Event = require('../models/Event');
 const Marshal = require('../models/Marshal');
 const Exemption = require('../models/Exemption');
 const Employee = require('../models/Employee');
+const ActivityLog = require('../models/ActivityLog');
+const { ACTIONS, logActivity } = require('../services/activityLog');
 const { renderToBuffer, fileNameFor } = require('../services/marshalListPdf');
 const { buildAttendanceWorkbook, attendanceFileName } = require('../services/attendanceSheet');
 const { requireAuth, requireRole } = require('../middleware/auth');
@@ -238,11 +240,15 @@ router.post('/events', async (req, res) => {
     // stale form (or one sending a field this type doesn't have) can't
     // smuggle a value onto the document. Role capacities are narrowed the
     // same way, to this type's own roles only.
+    // An exclusive event starts hidden from the marshal sign-up form.
+    const exclusive = req.body.exclusive === true;
     const doc = {
       eventType,
       roleCapacities: buildDefaultCapacities(roleCounts, rolesFor(eventType)),
       assignments: {},
       status: 'active',
+      exclusive,
+      signupOpen: !exclusive,
     };
     for (const field of fieldsFor(eventType)) {
       const raw = req.body[field];
@@ -255,6 +261,12 @@ router.post('/events', async (req, res) => {
     doc.endDate = endCheck.endDate;
 
     const event = await Event.create(doc);
+    await logActivity(req, {
+      action: 'event.create',
+      eventId: event._id,
+      eventName: event.name,
+      detail: exclusive ? `${eventType}, exclusive` : eventType,
+    });
     res.status(201).json({ event: event.toCard() });
   } catch (err) {
     console.error('Create event error:', err);
@@ -378,8 +390,16 @@ router.put('/marshals/:id/rating', async (req, res) => {
         return res.status(400).json({ error: 'Rating must be a whole number from 1 to 10' });
       }
     }
-    const marshal = await Marshal.findByIdAndUpdate(req.params.id, { $set: { rating: value } }, { new: true }).lean();
-    if (!marshal) return res.status(404).json({ error: 'Marshal not found' });
+    const before = await Marshal.findByIdAndUpdate(req.params.id, { $set: { rating: value } }).lean();
+    if (!before) return res.status(404).json({ error: 'Marshal not found' });
+    const marshal = { ...before, rating: value };
+    if ((before.rating || null) !== value) {
+      await logActivity(req, {
+        action: 'rate',
+        targetName: `${before.firstName} ${before.lastName}`.trim(),
+        detail: `${before.rating || 'none'} → ${value || 'none'}`,
+      });
+    }
     res.json({ marshal });
   } catch (err) {
     console.error('Rating update error:', err);
@@ -582,6 +602,14 @@ router.post('/events/:id/assign', async (req, res) => {
     if (!event.assignments) event.assignments = new Map();
     event.assignments.set(role, [...currentList, entry]);
     await event.save();
+    await logActivity(req, {
+      action: 'assign',
+      eventId: event._id,
+      eventName: event.name,
+      targetName: entry.name,
+      role,
+      detail: entry.kind === 'employee' ? 'employee' : '',
+    });
 
     res.json({ event: event.toCard() });
   } catch (err) {
@@ -626,10 +654,14 @@ router.post('/events/:id/unassign', async (req, res) => {
     if (!event) return res.status(404).json({ error: 'Event not found' });
 
     const currentList = (event.assignments && event.assignments.get(role)) || [];
+    const removed = currentList.filter((a) => matchesAssignee(a, { marshalId, employeeId }));
     const updatedList = currentList.filter((a) => !matchesAssignee(a, { marshalId, employeeId }));
     if (!event.assignments) event.assignments = new Map();
     event.assignments.set(role, updatedList);
     await event.save();
+    for (const a of removed) {
+      await logActivity(req, { action: 'unassign', eventId: event._id, eventName: event.name, targetName: a.name, role });
+    }
 
     res.json({ event: event.toCard() });
   } catch (err) {
@@ -647,6 +679,7 @@ router.post('/events/:id/complete', async (req, res) => {
       { new: true }
     );
     if (!event) return res.status(404).json({ error: 'Event not found' });
+    await logActivity(req, { action: 'event.complete', eventId: event._id, eventName: event.name });
     await clearExemptionsIfCycleEnded();
     res.json({ event: event.toCard() });
   } catch (err) {
@@ -664,6 +697,7 @@ router.post('/events/:id/signup', async (req, res) => {
     if (typeof open !== 'boolean') return res.status(400).json({ error: 'open must be true or false' });
     const event = await Event.findByIdAndUpdate(req.params.id, { signupOpen: open }, { new: true });
     if (!event) return res.status(404).json({ error: 'Event not found' });
+    await logActivity(req, { action: 'event.signup', eventId: event._id, eventName: event.name, detail: open ? 'On' : 'Off' });
     res.json({ event: event.toCard() });
   } catch (err) {
     console.error('Sign-up switch error:', err);
@@ -676,6 +710,13 @@ router.delete('/events/:id', async (req, res) => {
   try {
     const event = await Event.findByIdAndDelete(req.params.id);
     if (!event) return res.status(404).json({ error: 'Event not found' });
+    const lineupCount = [...(event.assignments || new Map()).values()].reduce((n, list) => n + (list || []).length, 0);
+    await logActivity(req, {
+      action: 'event.delete',
+      eventId: event._id,
+      eventName: event.name,
+      detail: `${event.status}, ${lineupCount} lined up`,
+    });
     // Deleting the event also deletes its assignments, which immediately frees
     // any marshals that were placed on it -- findExistingWeekendAssignment only
     // ever looks at events that still exist and are active.
@@ -696,6 +737,7 @@ router.post('/events/:id/reopen', async (req, res) => {
       { new: true }
     );
     if (!event) return res.status(404).json({ error: 'Event not found' });
+    await logActivity(req, { action: 'event.reopen', eventId: event._id, eventName: event.name });
     res.json({ event: event.toCard() });
   } catch (err) {
     console.error('Reopen event error:', err);
@@ -803,6 +845,7 @@ router.post('/exemptions', async (req, res) => {
       { $setOnInsert: { marshalId } },
       { upsert: true }
     );
+    await logActivity(req, { action: 'exempt', targetName: `${marshal.firstName} ${marshal.lastName}`.trim() });
     res.status(201).json({ ok: true, marshalId: String(marshalId) });
   } catch (err) {
     console.error('Add exemption error:', err);
@@ -813,11 +856,33 @@ router.post('/exemptions', async (req, res) => {
 // DELETE /api/admin/exemptions/:marshalId -- revoke an exemption
 router.delete('/exemptions/:marshalId', async (req, res) => {
   try {
-    await Exemption.deleteOne({ marshalId: req.params.marshalId });
+    const result = await Exemption.deleteOne({ marshalId: req.params.marshalId });
+    if (result.deletedCount) {
+      const marshal = await Marshal.findById(req.params.marshalId).select('firstName lastName').lean();
+      await logActivity(req, { action: 'unexempt', targetName: marshal ? `${marshal.firstName} ${marshal.lastName}`.trim() : '' });
+    }
     res.json({ ok: true, marshalId: req.params.marshalId });
   } catch (err) {
     console.error('Remove exemption error:', err);
     res.status(500).json({ error: 'Could not revoke exemption.' });
+  }
+});
+
+// ---------- activity log ----------
+
+// GET /api/admin/activity?before=<ISO date>&limit=100 -- newest first.
+// `before` pages back through older entries (pass the `at` of the last row).
+router.get('/activity', async (req, res) => {
+  try {
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 500);
+    const query = {};
+    const before = req.query.before ? new Date(req.query.before) : null;
+    if (before && !Number.isNaN(before.getTime())) query.at = { $lt: before };
+    const rows = await ActivityLog.find(query).sort({ at: -1 }).limit(limit + 1).lean();
+    res.json({ entries: rows.slice(0, limit), hasMore: rows.length > limit, actions: ACTIONS });
+  } catch (err) {
+    console.error('Activity log error:', err);
+    res.status(500).json({ error: 'Could not load the activity log.' });
   }
 });
 

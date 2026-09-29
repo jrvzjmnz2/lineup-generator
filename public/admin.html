@@ -44,6 +44,9 @@
       <button class="tab-btn" data-tab="marshallist">
         <span class="nav-index">04</span><span>Marshal List</span>
       </button>
+      <button class="tab-btn" data-tab="activity">
+        <span class="nav-index">05</span><span>Activity Log</span>
+      </button>
     </nav>
 
     <div class="sidebar-foot">
@@ -95,6 +98,16 @@
             <div id="roleCounterGrid" class="role-counter-grid">
               <p class="pool-empty" data-placeholder>Choose an event type to see its roles.</p>
             </div>
+
+            <p class="form-section-title">Exclusive</p>
+            <label class="form-switch" for="genExclusive">
+              <input type="checkbox" id="genExclusive" role="switch" />
+              <span class="form-switch-track" aria-hidden="true"></span>
+              <span class="form-switch-text">
+                <strong>Exclusive event</strong>
+                <span class="field-hint">Pinned to the top of Create List with its own card colour. Starts hidden from the marshal sign-up form. Can't be changed after the event is added.</span>
+              </span>
+            </label>
 
             <button type="submit" class="btn-primary btn-block">Add Event</button>
           </form>
@@ -151,11 +164,29 @@
             <h1>Marshal List</h1>
           </div>
           <div class="panel-head-actions">
+            <input type="search" id="marshalListSearch" class="name-search" placeholder="Search by name…" aria-label="Search marshals by name" autocomplete="off" />
             <button class="btn-outline btn-small" id="refreshMarshalList">Refresh</button>
           </div>
         </header>
         <div id="marshalListAlertBox"></div>
         <div id="marshalListWrap" class="card-panel flush" style="overflow-x:auto;"></div>
+      </section>
+
+      <!-- ----------------------- ACTIVITY LOG ----------------------- -->
+      <section class="tab-panel" id="panel-activity">
+        <header class="panel-head">
+          <div class="panel-head-text">
+            <p class="eyebrow">Section 05</p>
+            <h1>Activity Log</h1>
+            <p class="lede">Who assigned, removed, rated or deleted what, and when. Newest first.</p>
+          </div>
+          <div class="panel-head-actions">
+            <button class="btn-outline btn-small" id="refreshActivity">Refresh</button>
+          </div>
+        </header>
+        <div id="activityAlertBox"></div>
+        <div id="activityWrap" class="card-panel flush" style="overflow-x:auto;"></div>
+        <div class="activity-more"><button class="btn-outline btn-small" id="activityMore" type="button" hidden>Load older</button></div>
       </section>
 
     </div>

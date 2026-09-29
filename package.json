@@ -11,7 +11,8 @@
     "dev": "node --watch server/server.js",
     "seed:admin": "node server/scripts/seedAdmin.js",
     "fix:indexes": "node server/scripts/fixIndexes.js",
-    "seed:employees": "node server/scripts/seedEmployees.js"
+    "seed:employees": "node server/scripts/seedEmployees.js",
+    "format:names": "node server/scripts/formatNames.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

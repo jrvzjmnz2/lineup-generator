@@ -101,6 +101,7 @@
       if (btn.dataset.tab === 'createlist') loadCreateList();
       if (btn.dataset.tab === 'allevents') loadAllEvents();
       if (btn.dataset.tab === 'marshallist') loadMarshalList();
+      if (btn.dataset.tab === 'activity') loadActivity();
     });
   });
 
@@ -294,7 +295,8 @@
 
     // Only the fields this type has are sent -- the server drops anything else
     // anyway, but there is nothing else on screen to send.
-    const payload = { eventType, roleCounts };
+    const exclusive = document.getElementById('genExclusive').checked;
+    const payload = { eventType, roleCounts, exclusive };
     genFieldGrid.querySelectorAll('[data-gen-field]').forEach((el) => {
       payload[el.dataset.genField] = el.value.trim();
     });
@@ -311,7 +313,12 @@
       // A brand-new event is the one about to be lined up, so it opens
       // already expanded in Create List while the rest stay collapsed.
       if (created && created.event && created.event._id) expandedEvents.add(created.event._id);
-      showToast(`${eventType} event added — it now appears in Create List and the marshal sign-up form.`, 'success');
+      showToast(
+        exclusive
+          ? `Exclusive ${eventType} event added — it is at the top of Create List and hidden from the marshal sign-up form.`
+          : `${eventType} event added — it now appears in Create List and the marshal sign-up form.`,
+        'success'
+      );
       generateForm.reset();
       genTypeSelect.value = '';
       renderGenerateForm();
@@ -548,7 +555,11 @@
       createListGrid.innerHTML = '<div class="empty-state">No active events yet. Add one under "Generate Event".</div>';
       return;
     }
-    const visibleEvents = eventsForFilter();
+    // Exclusive events always come first. sort() is stable, so each group
+    // keeps the server's date order.
+    const visibleEvents = eventsForFilter()
+      .slice()
+      .sort((a, b) => Number(Boolean(b.exclusive)) - Number(Boolean(a.exclusive)));
     if (visibleEvents.length === 0) {
       const label = createListFilter === UNTYPED_FILTER ? 'untyped' : escapeHtml(createListFilter);
       createListGrid.innerHTML = `<div class="empty-state">No active ${label} events. Pick another team, or "All Events".</div>`;
@@ -832,7 +843,7 @@
 
   function buildEventCard(ev, { editable }) {
     const card = document.createElement('div');
-    card.className = 'event-card';
+    card.className = 'event-card' + (ev.exclusive ? ' exclusive' : '');
     card.dataset.eventId = ev._id;
 
     const head = document.createElement('div');
@@ -859,7 +870,7 @@
     const dayCountText = ev.dayCount > 1 ? ` (${ev.dayCount} days)` : '';
     head.innerHTML =
       `<div class="card-head-top"><h3>${escapeHtml(ev.name)}</h3>` +
-      `<span class="card-head-tags">${typeTag}` +
+      `<span class="card-head-tags">${ev.exclusive ? '<span class="exclusive-tag" title="Exclusive event — pinned to the top of Create List">Exclusive</span>' : ''}${typeTag}` +
       `<span class="${tagClass}" title="${tagTitle}">${tagText}</span></span></div>` +
       `<div class="meta">${dayLabel}${formatDateRange(ev.date, ev.endDate)}${dayCountText} &nbsp;•&nbsp; ${escapeHtml(ev.location)}</div>`;
     if (editable) head.appendChild(buildSignupSwitch(ev));
@@ -1312,6 +1323,54 @@
     return candidates.filter((m) => !placedHereIds.has(String(m._id)));
   }
 
+  // Name search typed into each pool card, by event id. Kept outside the card
+  // because every assign/unassign rebuilds the grid, and the search must
+  // survive that the same way the scroll position does.
+  const poolSearch = new Map();
+
+  // Lower-cased, accent-free text for name matching, so "pena" finds "Peña".
+  function searchKey(text) {
+    return String(text || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  }
+
+  // True when every word typed appears somewhere in the name, in any order:
+  // "cruz juan" finds "Juan Dela Cruz".
+  function nameMatches(name, query) {
+    const words = searchKey(query).split(/\s+/).filter(Boolean);
+    if (!words.length) return true;
+    const key = searchKey(name);
+    return words.every((w) => key.includes(w));
+  }
+
+  function buildPoolSearch(ev, pool) {
+    const input = document.createElement('input');
+    input.type = 'search';
+    input.className = 'name-search pool-search';
+    input.placeholder = 'Search by name…';
+    input.autocomplete = 'off';
+    input.setAttribute('aria-label', `Search signed-up marshals for ${ev.name}`);
+    input.value = poolSearch.get(ev._id) || '';
+
+    const none = document.createElement('span');
+    none.className = 'pool-empty';
+    none.textContent = 'No signed-up marshal matches that name.';
+
+    const apply = () => {
+      const q = input.value;
+      if (q.trim()) poolSearch.set(ev._id, q);
+      else poolSearch.delete(ev._id);
+      let shown = 0;
+      pool.querySelectorAll('.marshal-chip').forEach((chip) => {
+        const hit = nameMatches(chip.dataset.name, q);
+        chip.hidden = !hit;
+        if (hit) shown += 1;
+      });
+      none.hidden = shown > 0;
+    };
+    input.addEventListener('input', apply);
+    return { input, none, apply };
+  }
+
   function buildPoolCard(ev) {
     const visible = unplacedSignups(ev);
 
@@ -1338,6 +1397,7 @@
 
         const chip = document.createElement('div');
         chip.className = 'marshal-chip' + (disabled ? ' disabled' : '') + (isExempt ? ' exempt' : '');
+        chip.dataset.name = `${m.firstName} ${m.lastName}`;
 
         const nameSpan = document.createElement('span');
         nameSpan.className = 'marshal-chip-name';
@@ -1385,6 +1445,12 @@
       });
     }
 
+    if (visible.length > 0) {
+      const search = buildPoolSearch(ev, pool);
+      poolCard.appendChild(search.input);
+      pool.appendChild(search.none);
+      search.apply();
+    }
     poolCard.appendChild(pool);
     poolCard.appendChild(buildEmployeePicker(ev));
     return poolCard;
@@ -1649,6 +1715,9 @@
 
   let marshalListData = [];
 
+  const marshalListSearch = document.getElementById('marshalListSearch');
+  marshalListSearch.addEventListener('input', renderMarshalList);
+
   async function loadMarshalList() {
     try {
       const { marshals } = await apiRequest('/admin/marshal-list');
@@ -1716,6 +1785,13 @@
       return;
     }
 
+    const query = marshalListSearch.value;
+    const rows = marshalListData.filter((m) => nameMatches(`${m.firstName} ${m.lastName}`, query));
+    if (rows.length === 0) {
+      marshalListWrap.innerHTML = `<div class="empty-state">No marshal matches \u201c${escapeHtml(query.trim())}\u201d.</div>`;
+      return;
+    }
+
     const table = document.createElement('table');
     table.className = 'marshal-table';
     table.innerHTML = `<thead><tr>
@@ -1728,7 +1804,7 @@
 
     const tbody = document.createElement('tbody');
 
-    marshalListData.forEach((m) => {
+    rows.forEach((m) => {
       const tr = document.createElement('tr');
 
       const nameTd = document.createElement('td');
@@ -1788,6 +1864,84 @@
 
     table.appendChild(tbody);
     marshalListWrap.appendChild(table);
+  }
+
+  // ---------------- Activity Log ----------------
+  const activityWrap = document.getElementById('activityWrap');
+  const activityAlertBox = document.getElementById('activityAlertBox');
+  const activityMoreBtn = document.getElementById('activityMore');
+  document.getElementById('refreshActivity').addEventListener('click', () => loadActivity());
+  activityMoreBtn.addEventListener('click', () => loadActivity({ older: true }));
+
+  let activityEntries = [];
+  let activityLabels = {};
+
+  function formatWhen(iso) {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleString(undefined, {
+      month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
+    });
+  }
+
+  // One readable line per entry, e.g. 'JUAN DELA CRUZ as Spotter on "Run Manila"'.
+  function activityDetail(e) {
+    const parts = [];
+    if (e.targetName) parts.push(e.targetName);
+    if (e.role) parts.push(e.action === 'unassign' || e.action === 'marshal.optout' ? `from ${e.role}` : `as ${e.role}`);
+    if (e.eventName) parts.push(`${parts.length ? 'on ' : ''}\u201c${e.eventName}\u201d`);
+    let text = parts.join(' ');
+    if (e.detail) text += text ? ` (${e.detail})` : e.detail;
+    return text;
+  }
+
+  async function loadActivity({ older = false } = {}) {
+    const last = activityEntries[activityEntries.length - 1];
+    const qs = older && last ? `?before=${encodeURIComponent(last.at)}` : '';
+    activityMoreBtn.disabled = true;
+    try {
+      const { entries, hasMore, actions } = await apiRequest(`/admin/activity${qs}`);
+      activityLabels = actions || activityLabels;
+      activityEntries = older ? activityEntries.concat(entries) : entries;
+      activityMoreBtn.hidden = !hasMore;
+      activityAlertBox.innerHTML = '';
+      renderActivity();
+    } catch (err) {
+      activityAlertBox.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
+    } finally {
+      activityMoreBtn.disabled = false;
+    }
+  }
+
+  function renderActivity() {
+    activityWrap.innerHTML = '';
+    if (activityEntries.length === 0) {
+      activityWrap.innerHTML = '<div class="empty-state">Nothing logged yet. Actions show up here from now on.</div>';
+      return;
+    }
+    const table = document.createElement('table');
+    table.className = 'marshal-table activity-table';
+    table.innerHTML = '<thead><tr><th>When</th><th>Who</th><th>Action</th><th>Details</th></tr></thead>';
+    const tbody = document.createElement('tbody');
+    activityEntries.forEach((e) => {
+      const tr = document.createElement('tr');
+      const cells = [
+        formatWhen(e.at),
+        e.actorName + (e.actorRole === 'marshal' ? ' (marshal)' : ''),
+        activityLabels[e.action] || e.action,
+        activityDetail(e),
+      ];
+      cells.forEach((text, i) => {
+        const td = document.createElement('td');
+        td.textContent = text;
+        if (i === 0) td.className = 'activity-when';
+        if (i === 2) td.className = 'activity-action';
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    activityWrap.appendChild(table);
   }
 
   async function updateMarshalRating(marshalId, value, swatchEl) {
