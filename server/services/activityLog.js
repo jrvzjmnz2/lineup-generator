@@ -10,6 +10,7 @@ const ACTIONS = {
   assign: 'Assigned',
   unassign: 'Removed',
   'marshal.optout': 'Opted out',
+  'employee.signup': 'Employee sign-up',
   rate: 'Rated',
   exempt: 'Exempted',
   unexempt: 'Revoked exemption',

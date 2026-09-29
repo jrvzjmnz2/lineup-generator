@@ -34,6 +34,8 @@
   function routeAfterLogin(user) {
     if (user.role === 'admin') {
       window.location.href = 'admin.html';
+    } else if (user.role === 'signup') {
+      window.location.href = 'signup.html';
     } else if (!user.profileComplete) {
       window.location.href = 'complete-profile.html';
     } else {

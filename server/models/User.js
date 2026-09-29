@@ -20,7 +20,9 @@ const userSchema = new mongoose.Schema(
     // Google sign-up still only ever creates a "marshal" account.
     // "admin" accounts (the employees who build the lineup) are provisioned
     // via the seed script (npm run seed:admin) or promoted directly in the DB.
-    role: { type: String, enum: ['marshal', 'admin'], default: 'marshal' },
+    // "signup" is the one shared login for the employee sign-up form
+    // (npm run seed:signup); it can only reach /api/signup.
+    role: { type: String, enum: ['marshal', 'admin', 'signup'], default: 'marshal' },
   },
   { timestamps: true, collection: 'login' }
 );

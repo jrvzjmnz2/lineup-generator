@@ -12,6 +12,7 @@
     "seed:admin": "node server/scripts/seedAdmin.js",
     "fix:indexes": "node server/scripts/fixIndexes.js",
     "seed:employees": "node server/scripts/seedEmployees.js",
+    "seed:signup": "node server/scripts/seedSignup.js",
     "format:names": "node server/scripts/formatNames.js"
   },
   "dependencies": {

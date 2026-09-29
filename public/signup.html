@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Marshal Lineup System — Employee Sign-up</title>
+<link rel="icon" type="image/png" href="img/itemhound-icon.png" />
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-brand">
+    <img src="img/itemhound-logo-white.png" alt="ITEMHOUND" />
+    <span class="product">Marshal Lineup System</span>
+  </div>
+  <div class="user-info">
+    <span class="badge">Employee Sign-up</span>
+    <button class="btn-invert btn-small" id="logoutBtn">Log Out</button>
+  </div>
+</header>
+
+<div class="container" style="max-width: 780px; padding-top: var(--sp-7); padding-bottom: var(--sp-8);">
+
+  <div class="page-head">
+    <p class="eyebrow">Employees</p>
+    <h1>Sign up for exclusive events</h1>
+    <p class="lede">
+      Pick your name, then tick the exclusive events you want to join. Submitting again
+      with your name replaces your previous picks. Submit with nothing ticked to withdraw.
+    </p>
+    <div class="page-rule"></div>
+  </div>
+
+  <div class="alert alert-notice">
+    <strong>Please note:</strong> signing up puts you on the team's list for that event. It is not
+    a guaranteed slot — the team builds the final lineup.
+  </div>
+
+  <div id="alertBox"></div>
+
+  <div class="card-panel">
+    <form id="employeeSignupForm">
+      <div class="field signup-name-field">
+        <label for="employeeSelect">Your name</label>
+        <select id="employeeSelect" required>
+          <option value="">Loading names…</option>
+        </select>
+      </div>
+
+      <p class="form-section-title">Exclusive events</p>
+      <div id="eventList" class="checkbox-grid">
+        <p class="pool-empty">Loading events…</p>
+      </div>
+
+      <button type="submit" class="btn-primary btn-block" style="margin-top: var(--sp-5);">Submit</button>
+    </form>
+  </div>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/signup.js"></script>
+</body>
+</html>

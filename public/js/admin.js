@@ -422,8 +422,9 @@
 
   // Turns the slate card head into the open/close control and adds the
   // at-a-glance line a collapsed card needs: slots filled, and how many
-  // signed-up marshals are still waiting in the pool.
-  function makeCollapsible(wrapper, card, ev) {
+  // signed-up marshals are still waiting in the pool. All Events cards have
+  // no pool, so they pass `withPool: false` and show slots only.
+  function makeCollapsible(wrapper, card, ev, { withPool = true } = {}) {
     const head = card.querySelector('.card-head');
     const open = expandedEvents.has(ev._id);
     wrapper.classList.toggle('collapsed', !open);
@@ -441,11 +442,10 @@
     head.querySelector('.card-head-top').appendChild(chevron);
 
     const { filled, total } = fillSummary(ev);
-    const waiting = unplacedSignups(ev).length;
     const summary = document.createElement('div');
     summary.className = 'card-head-summary' + (total > 0 && filled >= total ? ' full' : '');
     const slotsText = total > 0 ? `${filled} / ${total} slots filled` : 'No slots set yet';
-    summary.textContent = `${slotsText}  ·  ${waiting} in pool`;
+    summary.textContent = withPool ? `${slotsText}  ·  ${unplacedSignups(ev).length} in pool` : slotsText;
     head.appendChild(summary);
 
     const toggle = () => {
@@ -478,15 +478,21 @@
   // and does not need persisting. It has to survive renderCreateList(), which
   // rebuilds the whole grid after every assign.
   const stagedEmployees = new Map();
+  // eventId -> [employeeId] from the employee sign-up form (shared "signup"
+  // login). These show on the pool card automatically, marked as signed up,
+  // alongside anyone staged by hand.
+  let employeeSignups = {};
 
   async function loadCreateList() {
     try {
-      const [{ events }, { marshals }, { marshalIds }, { employees }] = await Promise.all([
+      const [{ events }, { marshals }, { marshalIds }, { employees }, { byEvent }] = await Promise.all([
         apiRequest('/admin/events?status=active'),
         apiRequest('/admin/marshals'),
         apiRequest('/admin/exemptions'),
         apiRequest('/admin/employees'),
+        apiRequest('/admin/employee-signups'),
       ]);
+      employeeSignups = byEvent || {};
       allActiveEvents = events;
       allMarshals = marshals;
       exemptMarshalIds = new Set(marshalIds);
@@ -1474,7 +1480,15 @@
     heading.textContent = 'Employees';
     wrap.appendChild(heading);
 
-    const staged = stagedEmployees.get(ev._id) || [];
+    // Signed-up employees first, then any staged by hand that aren't already
+    // in that list.
+    const signedUp = (employeeSignups[ev._id] || []).map(String);
+    const signedUpSet = new Set(signedUp);
+    const staged = [
+      ...signedUp,
+      ...(stagedEmployees.get(ev._id) || []).map(String).filter((id) => !signedUpSet.has(id)),
+    ];
+    if (signedUp.length) heading.textContent = `Employees \u00b7 ${signedUp.length} signed up`;
 
     if (staged.length) {
       const chips = document.createElement('div');
@@ -1483,27 +1497,40 @@
         const emp = allEmployees.find((e) => String(e._id) === String(employeeId));
         if (!emp) return;
 
+        const isSignup = signedUpSet.has(String(employeeId));
         const chip = document.createElement('div');
-        chip.className = 'marshal-chip employee-chip';
+        chip.className = 'marshal-chip employee-chip' + (isSignup ? ' signed-up' : '');
         chip.draggable = true;
-        chip.title = `${emp.name} — drag into any role. Reusable: stays here after you place them.`;
+        chip.title = isSignup
+          ? `${emp.name} signed up for this event on the employee form — drag into any role.`
+          : `${emp.name} — drag into any role. Reusable: stays here after you place them.`;
 
         const nameSpan = document.createElement('span');
         nameSpan.className = 'marshal-chip-name';
         nameSpan.textContent = emp.name;
         chip.appendChild(nameSpan);
 
-        const drop = document.createElement('button');
-        drop.type = 'button';
-        drop.className = 'unstage-btn';
-        drop.textContent = '×';
-        drop.title = 'Remove from this list (does not unassign anyone)';
-        drop.addEventListener('click', (e) => {
-          e.stopPropagation();
-          e.preventDefault();
-          unstageEmployee(ev._id, employeeId);
-        });
-        chip.appendChild(drop);
+        // Signed-up employees come from the form, so there is nothing to
+        // un-stage; they leave the list when they withdraw on the form.
+        if (!isSignup) {
+          const drop = document.createElement('button');
+          drop.type = 'button';
+          drop.className = 'unstage-btn';
+          drop.textContent = '×';
+          drop.title = 'Remove from this list (does not unassign anyone)';
+          drop.addEventListener('click', (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            unstageEmployee(ev._id, employeeId);
+          });
+          chip.appendChild(drop);
+        } else {
+          const mark = document.createElement('span');
+          mark.className = 'signed-up-mark';
+          mark.textContent = '\u2713';
+          mark.setAttribute('aria-label', 'Signed up');
+          chip.appendChild(mark);
+        }
 
         chip.addEventListener('dragstart', (e) => {
           e.dataTransfer.setData('text/employee-id', String(employeeId));
@@ -1547,7 +1574,8 @@
 
   function stageEmployee(eventId, employeeId) {
     const list = stagedEmployees.get(eventId) || [];
-    if (list.some((id) => String(id) === String(employeeId))) {
+    const signedUp = (employeeSignups[eventId] || []).map(String);
+    if (signedUp.includes(String(employeeId)) || list.some((id) => String(id) === String(employeeId))) {
       showToast('That employee is already in the list below.', '');
       return;
     }
@@ -1678,6 +1706,34 @@
   const allEventsGrid = document.getElementById('allEventsGrid');
   document.getElementById('refreshAllEvents').addEventListener('click', loadAllEvents);
 
+  // Completed cards collapse the same way Create List cards do, sharing the
+  // same expandedEvents set (event ids never clash between the two tabs).
+  let allEventsData = [];
+  document.getElementById('expandAllEvents').addEventListener('click', () => {
+    allEventsData.forEach((ev) => expandedEvents.add(ev._id));
+    renderAllEvents();
+  });
+  document.getElementById('collapseAllEvents').addEventListener('click', () => {
+    allEventsData.forEach((ev) => expandedEvents.delete(ev._id));
+    renderAllEvents();
+  });
+
+  function renderAllEvents() {
+    allEventsGrid.innerHTML = '';
+    if (allEventsData.length === 0) {
+      allEventsGrid.innerHTML = '<div class="empty-state">No completed events in this month.</div>';
+      return;
+    }
+    allEventsData.forEach((ev) => {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'event-card-wrapper';
+      const card = buildEventCard(ev, { editable: false });
+      wrapper.appendChild(card);
+      makeCollapsible(wrapper, card, ev, { withPool: false });
+      allEventsGrid.appendChild(wrapper);
+    });
+  }
+
   const allEventsMonthPicker = document.getElementById('allEventsMonthPicker');
   // Default to the current calendar month on first load.
   allEventsMonthPicker.value = currentMonthValue();
@@ -1697,12 +1753,8 @@
     try {
       const [year, month] = allEventsMonthPicker.value.split('-').map((n) => parseInt(n, 10));
       const { events } = await apiRequest(`/admin/events?status=completed&year=${year}&month=${month}`);
-      allEventsGrid.innerHTML = '';
-      if (events.length === 0) {
-        allEventsGrid.innerHTML = '<div class="empty-state">No completed events in this month.</div>';
-        return;
-      }
-      events.forEach((ev) => allEventsGrid.appendChild(buildEventCard(ev, { editable: false })));
+      allEventsData = events;
+      renderAllEvents();
     } catch (err) {
       allEventsGrid.innerHTML = `<div class="alert alert-error">${err.message}</div>`;
     }

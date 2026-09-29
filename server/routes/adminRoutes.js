@@ -3,6 +3,7 @@ const Event = require('../models/Event');
 const Marshal = require('../models/Marshal');
 const Exemption = require('../models/Exemption');
 const Employee = require('../models/Employee');
+const EmployeeSignup = require('../models/EmployeeSignup');
 const ActivityLog = require('../models/ActivityLog');
 const { ACTIONS, logActivity } = require('../services/activityLog');
 const { renderToBuffer, fileNameFor } = require('../services/marshalListPdf');
@@ -361,6 +362,26 @@ router.get('/employees', async (req, res) => {
   } catch (err) {
     console.error('Employee list error:', err);
     res.status(500).json({ error: 'Could not load the employee list.' });
+  }
+});
+
+// GET /api/admin/employee-signups -- what employees picked on the shared
+// sign-up form, as eventId -> [employeeId]. Create List puts these employees
+// straight into each exclusive event's pool card.
+router.get('/employee-signups', async (req, res) => {
+  try {
+    const signups = await EmployeeSignup.find().select('employeeId events').lean();
+    const byEvent = {};
+    for (const s of signups) {
+      for (const evId of s.events || []) {
+        const key = String(evId);
+        (byEvent[key] = byEvent[key] || []).push(String(s.employeeId));
+      }
+    }
+    res.json({ byEvent });
+  } catch (err) {
+    console.error('Employee sign-ups error:', err);
+    res.status(500).json({ error: 'Could not load employee sign-ups.' });
   }
 });
 

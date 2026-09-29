@@ -10,6 +10,7 @@ require('./config/dns').applyDnsServers();
 const authRoutes = require('./routes/auth');
 const marshalRoutes = require('./routes/marshalRoutes');
 const adminRoutes = require('./routes/adminRoutes');
+const signupRoutes = require('./routes/signupRoutes');
 
 const app = express();
 app.use(cors());
@@ -18,6 +19,7 @@ app.use(express.json());
 app.use('/api/auth', authRoutes);
 app.use('/api/marshal', marshalRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/signup', signupRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ ok: true, dbState: mongoose.connection.readyState });

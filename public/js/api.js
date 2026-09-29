@@ -141,7 +141,8 @@ const Auth = {
       return null;
     }
     if (role && user.role !== role) {
-      window.location.href = user.role === 'admin' ? 'admin.html' : 'marshal.html';
+      const home = { admin: 'admin.html', signup: 'signup.html' };
+      window.location.href = home[user.role] || 'marshal.html';
       return null;
     }
     if (role === 'marshal' && !opts.allowIncompleteProfile && !user.profileComplete) {
