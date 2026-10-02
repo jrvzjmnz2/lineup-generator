@@ -47,6 +47,9 @@
       <button class="tab-btn" data-tab="activity">
         <span class="nav-index">05</span><span>Activity Log</span>
       </button>
+      <button class="tab-btn" data-tab="tools">
+        <span class="nav-index">06</span><span>Admin Tools</span>
+      </button>
     </nav>
 
     <div class="sidebar-foot">
@@ -61,6 +64,7 @@
         </span>
         <span class="theme-track" aria-hidden="true"></span>
       </button>
+      <button class="btn-invert btn-small" id="exportTimingBtn" type="button" title="Download every Timing event as a JSON file">Export JSON</button>
       <button class="btn-invert btn-small" id="logoutBtn">Log Out</button>
     </div>
   </aside>
@@ -189,6 +193,52 @@
         <div id="activityAlertBox"></div>
         <div id="activityWrap" class="card-panel flush" style="overflow-x:auto;"></div>
         <div class="activity-more"><button class="btn-outline btn-small" id="activityMore" type="button" hidden>Load older</button></div>
+      </section>
+
+      <!-- ----------------------- ADMIN TOOLS ------------------------ -->
+      <section class="tab-panel" id="panel-tools">
+        <header class="panel-head">
+          <div class="panel-head-text">
+            <p class="eyebrow">Section 06</p>
+            <h1>Admin Tools</h1>
+            <p class="lede">Manage the employee list and fix marshal details. Every change is recorded in the Activity Log.</p>
+          </div>
+          <div class="panel-head-actions">
+            <button class="btn-outline btn-small" id="refreshTools">Refresh</button>
+          </div>
+        </header>
+        <div id="toolsAlertBox"></div>
+
+        <div class="card-panel tools-section collapsed" id="employeeToolsSection">
+          <button type="button" class="tools-section-head" aria-expanded="false" aria-controls="employeeToolsBody">
+            <span class="tools-section-title">Employees</span>
+            <span class="tools-count" id="employeeToolsCount"></span>
+            <span class="collapse-chevron" aria-hidden="true">&#9662;</span>
+          </button>
+          <div class="tools-section-body" id="employeeToolsBody">
+          <input type="search" id="employeeSearch" class="name-search tools-search" placeholder="Search by name…" aria-label="Search employees by name" autocomplete="off" />
+          <form id="addEmployeeForm" class="tools-add-row">
+            <input type="text" id="newEmployeeName" placeholder="Full name" aria-label="New employee name" required />
+            <input type="text" id="newEmployeeTeam" list="teamOptions" placeholder="Team (optional)" aria-label="New employee team" />
+            <button type="submit" class="btn-primary btn-small">Add employee</button>
+          </form>
+          <datalist id="teamOptions"></datalist>
+          <div id="employeeToolsWrap" class="tools-table-wrap"></div>
+          </div>
+        </div>
+
+        <div class="card-panel tools-section collapsed" id="marshalToolsSection">
+          <button type="button" class="tools-section-head" aria-expanded="false" aria-controls="marshalToolsBody">
+            <span class="tools-section-title">Marshal details</span>
+            <span class="tools-count" id="marshalToolsCount"></span>
+            <span class="collapse-chevron" aria-hidden="true">&#9662;</span>
+          </button>
+          <div class="tools-section-body" id="marshalToolsBody">
+          <input type="search" id="marshalToolsSearch" class="name-search tools-search" placeholder="Search by name…" aria-label="Search marshals by name" autocomplete="off" />
+          <p class="field-hint tools-note">Fix a wrong name or phone number. Name changes also update every lineup the marshal is on. Email can't be changed here — it is the Google account they sign in with.</p>
+          <div id="marshalToolsWrap" class="tools-table-wrap"></div>
+          </div>
+        </div>
       </section>
 
     </div>

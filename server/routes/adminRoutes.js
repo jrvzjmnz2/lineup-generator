@@ -1,8 +1,11 @@
+const crypto = require('crypto');
 const express = require('express');
 const Event = require('../models/Event');
 const Marshal = require('../models/Marshal');
 const Exemption = require('../models/Exemption');
 const Employee = require('../models/Employee');
+const User = require('../models/User');
+const { properName } = require('../utils/names');
 const EmployeeSignup = require('../models/EmployeeSignup');
 const ActivityLog = require('../models/ActivityLog');
 const { ACTIONS, logActivity } = require('../services/activityLog');
@@ -362,6 +365,201 @@ router.get('/employees', async (req, res) => {
   } catch (err) {
     console.error('Employee list error:', err);
     res.status(500).json({ error: 'Could not load the employee list.' });
+  }
+});
+
+// ---------- admin tools: employees ----------
+//
+// The employee_list roster used to be editable only through the seed script.
+// These routes back the Admin Tools tab.
+
+const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// Same name ignoring case, for the duplicate check (the unique index on
+// `name` is case-sensitive, so "juan cruz" and "Juan Cruz" would both fit).
+function findEmployeeByName(name, excludeId) {
+  const query = { name: { $regex: `^${escapeRegex(name)}$`, $options: 'i' } };
+  if (excludeId) query._id = { $ne: excludeId };
+  return Employee.findOne(query).lean();
+}
+
+// Every event's lineup copies the assignee's name onto the entry (upper-case,
+// for the cards and PDF). A rename rewrites those copies so old and new
+// lineups keep matching the person. `match` picks the entries to rewrite.
+async function renameAssignmentCopies(match, newName) {
+  const upper = String(newName).trim().toUpperCase();
+  const events = await Event.find(match.query);
+  let touched = 0;
+  for (const ev of events) {
+    let changed = false;
+    for (const [role, list] of ev.assignments || new Map()) {
+      const next = (list || []).map((a) => {
+        if (!match.entry(a) || a.name === upper) return a;
+        changed = true;
+        return { ...(a.toObject ? a.toObject() : a), name: upper };
+      });
+      if (changed) ev.assignments.set(role, next);
+    }
+    if (changed) {
+      await ev.save();
+      touched += 1;
+    }
+  }
+  return touched;
+}
+
+// Timing events keep Team Lead / Off Site Support as "A / B / C" text built
+// from employee names. Swap the old name for the new one on ACTIVE events so
+// the checklist stays ticked; completed events keep what was printed.
+async function renameInTeamFields(oldName, newName) {
+  const fields = ['teamLeader', 'offsiteSupport'];
+  const events = await Event.find({
+    status: 'active',
+    $or: fields.map((f) => ({ [f]: { $regex: escapeRegex(oldName), $options: 'i' } })),
+  });
+  for (const ev of events) {
+    for (const f of fields) {
+      const parts = String(ev[f] || '').split('/').map((s) => s.trim()).filter(Boolean);
+      const next = parts.map((p) => (p.toLowerCase() === oldName.toLowerCase() ? newName : p));
+      ev[f] = next.join(' / ');
+    }
+    await ev.save();
+  }
+}
+
+// POST /api/admin/employees { name, team }
+router.post('/employees', async (req, res) => {
+  try {
+    const name = String((req.body && req.body.name) || '').trim().replace(/\s+/g, ' ');
+    const team = String((req.body && req.body.team) || '').trim();
+    if (!name) return res.status(400).json({ error: 'Enter the employee name.' });
+    if (await findEmployeeByName(name)) return res.status(409).json({ error: `${name} is already on the employee list.` });
+    const employee = await Employee.create({ name, team });
+    await logActivity(req, { action: 'employee.add', targetName: name, detail: team });
+    res.status(201).json({ employee });
+  } catch (err) {
+    console.error('Add employee error:', err);
+    res.status(500).json({ error: 'Could not add the employee.' });
+  }
+});
+
+// PUT /api/admin/employees/:id { name, team }
+router.put('/employees/:id', async (req, res) => {
+  try {
+    const employee = await Employee.findById(req.params.id);
+    if (!employee) return res.status(404).json({ error: 'Employee not found' });
+    const name = String((req.body && req.body.name) || '').trim().replace(/\s+/g, ' ');
+    const team = String((req.body && req.body.team) || '').trim();
+    if (!name) return res.status(400).json({ error: 'Enter the employee name.' });
+    if (await findEmployeeByName(name, employee._id)) {
+      return res.status(409).json({ error: `${name} is already on the employee list.` });
+    }
+
+    const oldName = employee.name;
+    const changes = [];
+    if (oldName !== name) changes.push(`name ${oldName} \u2192 ${name}`);
+    if ((employee.team || '') !== team) changes.push(`team ${employee.team || 'none'} \u2192 ${team || 'none'}`);
+    employee.name = name;
+    employee.team = team;
+    await employee.save();
+
+    if (oldName !== name) {
+      await renameAssignmentCopies(
+        {
+          query: {},
+          entry: (a) => a.kind === 'employee' && String(a.employeeId) === String(employee._id),
+        },
+        name
+      );
+      await renameInTeamFields(oldName, name);
+      await EmployeeSignup.updateOne({ employeeId: employee._id }, { $set: { employeeName: name } });
+    }
+    if (changes.length) {
+      await logActivity(req, { action: 'employee.edit', targetName: name, detail: changes.join('; ') });
+    }
+    res.json({ employee: employee.toObject() });
+  } catch (err) {
+    console.error('Edit employee error:', err);
+    res.status(500).json({ error: 'Could not save the employee.' });
+  }
+});
+
+// DELETE /api/admin/employees/:id
+// Refused while the employee sits on an ACTIVE event's lineup -- take them
+// off first. Completed lineups keep their copy of the name.
+router.delete('/employees/:id', async (req, res) => {
+  try {
+    const employee = await Employee.findById(req.params.id).lean();
+    if (!employee) return res.status(404).json({ error: 'Employee not found' });
+
+    const active = await Event.find({ status: 'active' }).select('name assignments').lean();
+    const onEvents = active
+      .filter((ev) => Object.values(ev.assignments || {}).some((list) =>
+        (list || []).some((a) => a.kind === 'employee' && String(a.employeeId) === String(employee._id))))
+      .map((ev) => ev.name);
+    if (onEvents.length) {
+      return res.status(409).json({
+        error: `${employee.name} is still lined up on: ${onEvents.join(', ')}. Remove them from those events first.`,
+      });
+    }
+
+    await Employee.deleteOne({ _id: employee._id });
+    await EmployeeSignup.deleteOne({ employeeId: employee._id });
+    await logActivity(req, { action: 'employee.delete', targetName: employee.name, detail: employee.team || '' });
+    res.json({ ok: true, id: String(employee._id) });
+  } catch (err) {
+    console.error('Delete employee error:', err);
+    res.status(500).json({ error: 'Could not delete the employee.' });
+  }
+});
+
+// ---------- admin tools: marshal details ----------
+
+// PUT /api/admin/marshals/:id/details { firstName, lastName, contactNumber }
+// Fixes a marshal's name or phone number. Written to the marshal's login
+// (so the next submission copies the fixed values) and to their submission,
+// and a name change rewrites the name on every lineup they are on. Email is
+// not editable: it is the Google account they sign in with.
+router.put('/marshals/:id/details', async (req, res) => {
+  try {
+    const marshal = await Marshal.findById(req.params.id);
+    if (!marshal) return res.status(404).json({ error: 'Marshal not found' });
+    const body = req.body || {};
+    const firstName = properName(body.firstName);
+    const lastName = properName(body.lastName);
+    const contactNumber = String(body.contactNumber || '').trim();
+    if (!firstName || !lastName || !contactNumber) {
+      return res.status(400).json({ error: 'First name, last name and contact number are all required.' });
+    }
+
+    const before = `${marshal.firstName} ${marshal.lastName}`.trim();
+    const after = `${firstName} ${lastName}`;
+    const changes = [];
+    if (before !== after) changes.push(`name ${before} \u2192 ${after}`);
+    if (marshal.contactNumber !== contactNumber) changes.push('contact number');
+
+    marshal.firstName = firstName;
+    marshal.lastName = lastName;
+    marshal.contactNumber = contactNumber;
+    await marshal.save();
+    await User.updateOne({ _id: marshal.userId }, { $set: { firstName, lastName, contactNumber } });
+
+    if (before !== after) {
+      await renameAssignmentCopies(
+        {
+          query: {},
+          entry: (a) => a.kind !== 'employee' && String(a.marshalId) === String(marshal._id),
+        },
+        after
+      );
+    }
+    if (changes.length) {
+      await logActivity(req, { action: 'marshal.edit', targetName: after, detail: changes.join('; ') });
+    }
+    res.json({ marshal: marshal.toObject() });
+  } catch (err) {
+    console.error('Edit marshal error:', err);
+    res.status(500).json({ error: 'Could not save the marshal details.' });
   }
 });
 
@@ -886,6 +1084,40 @@ router.delete('/exemptions/:marshalId', async (req, res) => {
   } catch (err) {
     console.error('Remove exemption error:', err);
     res.status(500).json({ error: 'Could not revoke exemption.' });
+  }
+});
+
+// ---------- export ----------
+
+// POST /api/admin/export/timing-events { code }
+// Downloads every document in the events collection whose eventType is
+// Timing, as stored (raw, not the card shape). Guarded by an access code on
+// top of the admin login. The code lives in EXPORT_ACCESS_CODE and is sent in
+// the body, never the URL, so it stays out of logs and browser history.
+router.post('/export/timing-events', async (req, res) => {
+  try {
+    const expected = process.env.EXPORT_ACCESS_CODE || '';
+    if (!expected) {
+      return res.status(503).json({ error: 'Export is not set up on this server (EXPORT_ACCESS_CODE is missing).' });
+    }
+    const given = String((req.body && req.body.code) || '');
+    const a = crypto.createHash('sha256').update(given).digest();
+    const b = crypto.createHash('sha256').update(expected).digest();
+    if (!crypto.timingSafeEqual(a, b)) {
+      await logActivity(req, { action: 'export.denied', detail: 'wrong access code' });
+      return res.status(403).json({ error: 'Wrong access code.' });
+    }
+
+    const events = await Event.find({ eventType: 'Timing' }).sort({ date: 1, createdAt: 1 }).lean();
+    await logActivity(req, { action: 'export.timing', detail: `${events.length} event${events.length === 1 ? '' : 's'}` });
+
+    const stamp = new Date().toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="timing-events-${stamp}.json"`);
+    res.send(JSON.stringify(events, null, 2));
+  } catch (err) {
+    console.error('Timing export error:', err);
+    res.status(500).json({ error: 'Could not export the Timing events.' });
   }
 });
 

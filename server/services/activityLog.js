@@ -14,6 +14,12 @@ const ACTIONS = {
   rate: 'Rated',
   exempt: 'Exempted',
   unexempt: 'Revoked exemption',
+  'employee.add': 'Added employee',
+  'employee.edit': 'Edited employee',
+  'employee.delete': 'Deleted employee',
+  'marshal.edit': 'Edited marshal',
+  'export.timing': 'Exported Timing events',
+  'export.denied': 'Export refused',
 };
 
 function actorFields(user) {

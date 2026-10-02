@@ -90,6 +90,44 @@
     });
   })();
 
+  // ---------------- Export JSON (sidebar) ----------------
+  //
+  // Downloads every Timing event from the events collection. The access code
+  // is checked on the server; the popup stays open on a wrong code.
+  document.getElementById('exportTimingBtn').addEventListener('click', () => {
+    confirmDialog({
+      title: 'Export Timing events',
+      message: 'Downloads every Timing event (active and completed) as a JSON file. Enter the access code to continue.',
+      confirmText: 'Export',
+      input: { label: 'Access code', type: 'password' },
+      onConfirm: async (code) => {
+        if (!code) return 'Enter the access code.';
+        const res = await fetch('/api/admin/export/timing-events', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${Auth.getToken()}` },
+          body: JSON.stringify({ code }),
+        });
+        if (!res.ok) {
+          let msg = `Export failed (${res.status})`;
+          try { const data = await res.json(); if (data && data.error) msg = data.error; } catch (err) { /* no body */ }
+          return msg;
+        }
+        const blob = await res.blob();
+        const cd = res.headers.get('Content-Disposition') || '';
+        const m = /filename="([^"]+)"/.exec(cd);
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = m ? m[1] : 'timing-events.json';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+        showToast('Timing events exported.', 'success');
+        return null;
+      },
+    });
+  });
+
   // ---------------- Tabs ----------------
   const tabButtons = document.querySelectorAll('.tab-btn');
   tabButtons.forEach((btn) => {
@@ -102,6 +140,7 @@
       if (btn.dataset.tab === 'allevents') loadAllEvents();
       if (btn.dataset.tab === 'marshallist') loadMarshalList();
       if (btn.dataset.tab === 'activity') loadActivity();
+      if (btn.dataset.tab === 'tools') loadTools();
     });
   });
 
@@ -505,6 +544,15 @@
   }
 
   async function toggleExemption(marshalId, currentlyExempt) {
+    if (currentlyExempt) {
+      const m = allMarshals.find((x) => String(x._id) === String(marshalId));
+      const ok = await confirmDialog({
+        title: 'Revoke this exemption?',
+        message: `${m ? `${m.firstName} ${m.lastName}` : 'This marshal'} goes back to one weekend event at a time. Anyone already placed stays where they are.`,
+        confirmText: 'Revoke',
+      });
+      if (!ok) return;
+    }
     // Optimistic local update so the chip responds immediately.
     if (currentlyExempt) exemptMarshalIds.delete(marshalId);
     else exemptMarshalIds.add(marshalId);
@@ -835,7 +883,17 @@
 
     wrap.append(input, track, text);
     ['click', 'keydown'].forEach((type) => wrap.addEventListener(type, (e) => e.stopPropagation()));
-    input.addEventListener('change', () => setSignupOpen(ev._id, input.checked, input));
+    input.addEventListener('change', async () => {
+      if (!input.checked) {
+        const ok = await confirmDialog({
+          title: 'Hide from the sign-up form?',
+          message: `Marshals will no longer see "${ev.name}" on the sign-up form. Anyone already signed up or lined up stays.`,
+          confirmText: 'Switch off',
+        });
+        if (!ok) { input.checked = true; return; }
+      }
+      setSignupOpen(ev._id, input.checked, input);
+    });
     return wrap;
   }
 
@@ -1648,11 +1706,33 @@
   }
 
   async function unassignMarshal(eventId, role, ref) {
+    // Remember the entry so Undo can put it back with its note.
+    const before = allActiveEvents.find((e) => e._id === eventId);
+    const entry = before && ((before.assignments || {})[role] || []).find((a) =>
+      ref.employeeId
+        ? a.kind === 'employee' && String(a.employeeId) === String(ref.employeeId)
+        : a.kind !== 'employee' && String(a.marshalId) === String(ref.marshalId));
     try {
       const { event } = await apiRequest(`/admin/events/${eventId}/unassign`, { method: 'POST', body: { role, ...ref } });
       replaceLocalEvent(event);
+      if (entry) {
+        showToast(`Removed ${entry.name} from ${role}.`, 'success', {
+          text: 'Undo',
+          onClick: () => undoUnassign(eventId, role, ref, entry.note || ''),
+        });
+      }
     } catch (err) {
       showToast(err.message, 'error');
+    }
+  }
+
+  async function undoUnassign(eventId, role, ref, note) {
+    try {
+      const { event } = await apiRequest(`/admin/events/${eventId}/assign`, { method: 'POST', body: { role, note, ...ref } });
+      replaceLocalEvent(event);
+      showToast('Put back.', 'success');
+    } catch (err) {
+      showToast(`Could not undo: ${err.message}`, 'error');
     }
   }
 
@@ -2012,6 +2092,238 @@
     });
     table.appendChild(tbody);
     activityWrap.appendChild(table);
+  }
+
+  // ---------------- Admin Tools ----------------
+  const toolsAlertBox = document.getElementById('toolsAlertBox');
+  const employeeToolsWrap = document.getElementById('employeeToolsWrap');
+  const marshalToolsWrap = document.getElementById('marshalToolsWrap');
+  const employeeSearch = document.getElementById('employeeSearch');
+  const marshalToolsSearch = document.getElementById('marshalToolsSearch');
+  const addEmployeeForm = document.getElementById('addEmployeeForm');
+  const teamOptions = document.getElementById('teamOptions');
+  document.getElementById('refreshTools').addEventListener('click', () => loadTools());
+  employeeSearch.addEventListener('input', renderEmployeeTools);
+  marshalToolsSearch.addEventListener('input', renderMarshalTools);
+
+  // Both sections start collapsed to their head; clicking the head opens
+  // the full list. Open/closed survives Refresh and every save, since only
+  // the tables are rebuilt.
+  document.querySelectorAll('#panel-tools .tools-section-head').forEach((head) => {
+    head.addEventListener('click', () => {
+      const section = head.closest('.tools-section');
+      const open = section.classList.toggle('collapsed') === false;
+      head.setAttribute('aria-expanded', String(open));
+      if (open) {
+        const search = section.querySelector('.tools-search');
+        if (search) search.focus();
+      }
+    });
+  });
+
+  let toolEmployees = [];
+  let toolMarshals = [];
+  // Only one row is edited at a time: 'emp:<id>' or 'mar:<id>'.
+  let editingRow = null;
+
+  async function loadTools() {
+    try {
+      const [{ employees }, { marshals }] = await Promise.all([
+        apiRequest('/admin/employees'),
+        apiRequest('/admin/marshals'),
+      ]);
+      toolEmployees = employees || [];
+      toolMarshals = marshals || [];
+      allEmployees = toolEmployees; // keep the Create List dropdowns current too
+      toolsAlertBox.innerHTML = '';
+      document.getElementById('employeeToolsCount').textContent =
+        `${toolEmployees.length} employee${toolEmployees.length === 1 ? '' : 's'}`;
+      document.getElementById('marshalToolsCount').textContent =
+        `${toolMarshals.length} marshal${toolMarshals.length === 1 ? '' : 's'}`;
+      renderTeamOptions();
+      renderEmployeeTools();
+      renderMarshalTools();
+    } catch (err) {
+      toolsAlertBox.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
+    }
+  }
+
+  // Team suggestions: the event types, plus any team already in use.
+  function renderTeamOptions() {
+    const teams = new Set(eventTypes.map((t) => t.name));
+    toolEmployees.forEach((e) => { if (e.team) teams.add(e.team); });
+    teamOptions.innerHTML = '';
+    [...teams].sort().forEach((t) => {
+      const opt = document.createElement('option');
+      opt.value = t;
+      teamOptions.appendChild(opt);
+    });
+  }
+
+  function toolButton(text, cls, onClick) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = `${cls} btn-small`;
+    b.textContent = text;
+    b.addEventListener('click', onClick);
+    return b;
+  }
+
+  function toolInput(value, label, opts = {}) {
+    const input = document.createElement('input');
+    input.type = opts.type || 'text';
+    input.value = value || '';
+    input.setAttribute('aria-label', label);
+    if (opts.list) input.setAttribute('list', opts.list);
+    return input;
+  }
+
+  function renderEmployeeTools() {
+    const rows = toolEmployees.filter((e) => nameMatches(e.name, employeeSearch.value));
+    employeeToolsWrap.innerHTML = '';
+    if (rows.length === 0) {
+      employeeToolsWrap.innerHTML = `<div class="empty-state">${toolEmployees.length ? 'No employee matches that name.' : 'No employees on file yet. Add one above.'}</div>`;
+      return;
+    }
+    const table = document.createElement('table');
+    table.className = 'marshal-table tools-table';
+    table.innerHTML = '<thead><tr><th>Name</th><th>Team</th><th class="tools-actions-col">Actions</th></tr></thead>';
+    const tbody = document.createElement('tbody');
+    rows.forEach((emp) => {
+      const tr = document.createElement('tr');
+      const nameTd = document.createElement('td');
+      const teamTd = document.createElement('td');
+      const actTd = document.createElement('td');
+      actTd.className = 'tools-actions';
+
+      if (editingRow === `emp:${emp._id}`) {
+        const nameIn = toolInput(emp.name, 'Employee name');
+        const teamIn = toolInput(emp.team, 'Employee team', { list: 'teamOptions' });
+        nameTd.appendChild(nameIn);
+        teamTd.appendChild(teamIn);
+        actTd.append(
+          toolButton('Save', 'btn-primary', () => saveEmployee(emp, nameIn.value, teamIn.value)),
+          toolButton('Cancel', 'btn-outline', () => { editingRow = null; renderEmployeeTools(); })
+        );
+        setTimeout(() => nameIn.focus(), 0);
+      } else {
+        nameTd.textContent = emp.name;
+        teamTd.textContent = emp.team || '—';
+        actTd.append(
+          toolButton('Edit', 'btn-outline', () => { editingRow = `emp:${emp._id}`; renderEmployeeTools(); renderMarshalTools(); }),
+          toolButton('Delete', 'btn-danger', () => deleteEmployee(emp))
+        );
+      }
+      tr.append(nameTd, teamTd, actTd);
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    employeeToolsWrap.appendChild(table);
+  }
+
+  addEmployeeForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const nameIn = document.getElementById('newEmployeeName');
+    const teamIn = document.getElementById('newEmployeeTeam');
+    try {
+      const { employee } = await apiRequest('/admin/employees', {
+        method: 'POST',
+        body: { name: nameIn.value, team: teamIn.value },
+      });
+      showToast(`${employee.name} added to the employee list.`, 'success');
+      nameIn.value = '';
+      teamIn.value = '';
+      await loadTools();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  });
+
+  async function saveEmployee(emp, name, team) {
+    try {
+      await apiRequest(`/admin/employees/${emp._id}`, { method: 'PUT', body: { name, team } });
+      editingRow = null;
+      showToast('Employee saved.', 'success');
+      await loadTools();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  }
+
+  async function deleteEmployee(emp) {
+    const ok = await confirmDialog({
+      title: 'Delete this employee?',
+      message: `${emp.name} is removed from the employee list and from any exclusive-event sign-ups. Completed lineups keep their name.`,
+      confirmText: 'Delete employee',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await apiRequest(`/admin/employees/${emp._id}`, { method: 'DELETE' });
+      showToast(`${emp.name} deleted.`, 'success');
+      await loadTools();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  }
+
+  function renderMarshalTools() {
+    const rows = toolMarshals.filter((m) => nameMatches(`${m.firstName} ${m.lastName}`, marshalToolsSearch.value));
+    marshalToolsWrap.innerHTML = '';
+    if (rows.length === 0) {
+      marshalToolsWrap.innerHTML = `<div class="empty-state">${toolMarshals.length ? 'No marshal matches that name.' : 'No marshals have signed up yet.'}</div>`;
+      return;
+    }
+    const table = document.createElement('table');
+    table.className = 'marshal-table tools-table';
+    table.innerHTML = '<thead><tr><th>First name</th><th>Last name</th><th>Contact number</th><th>Email</th><th class="tools-actions-col">Actions</th></tr></thead>';
+    const tbody = document.createElement('tbody');
+    rows.forEach((m) => {
+      const tr = document.createElement('tr');
+      const cells = [document.createElement('td'), document.createElement('td'), document.createElement('td')];
+      const emailTd = document.createElement('td');
+      emailTd.className = 'sub';
+      emailTd.textContent = m.email || '';
+      const actTd = document.createElement('td');
+      actTd.className = 'tools-actions';
+
+      if (editingRow === `mar:${m._id}`) {
+        const inputs = [
+          toolInput(m.firstName, 'First name'),
+          toolInput(m.lastName, 'Last name'),
+          toolInput(m.contactNumber, 'Contact number', { type: 'tel' }),
+        ];
+        inputs.forEach((input, i) => cells[i].appendChild(input));
+        actTd.append(
+          toolButton('Save', 'btn-primary', () => saveMarshal(m, inputs[0].value, inputs[1].value, inputs[2].value)),
+          toolButton('Cancel', 'btn-outline', () => { editingRow = null; renderMarshalTools(); })
+        );
+        setTimeout(() => inputs[0].focus(), 0);
+      } else {
+        cells[0].textContent = m.firstName;
+        cells[1].textContent = m.lastName;
+        cells[2].textContent = m.contactNumber;
+        actTd.append(toolButton('Edit', 'btn-outline', () => { editingRow = `mar:${m._id}`; renderMarshalTools(); renderEmployeeTools(); }));
+      }
+      tr.append(...cells, emailTd, actTd);
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    marshalToolsWrap.appendChild(table);
+  }
+
+  async function saveMarshal(m, firstName, lastName, contactNumber) {
+    try {
+      await apiRequest(`/admin/marshals/${m._id}/details`, {
+        method: 'PUT',
+        body: { firstName, lastName, contactNumber },
+      });
+      editingRow = null;
+      showToast('Marshal details saved.', 'success');
+      await loadTools();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
   }
 
   async function updateMarshalRating(marshalId, value, swatchEl) {

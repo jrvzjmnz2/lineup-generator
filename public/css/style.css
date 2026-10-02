@@ -2244,3 +2244,87 @@ label {
 @media (max-width: 560px) {
   .confirm-dialog-actions > button { flex: 1 1 auto; }
 }
+/* ============================  ADMIN TOOLS  ============================ */
+.tools-section { margin-bottom: var(--sp-5); }
+/* The head is the open/close control: title, count, chevron. */
+.tools-section-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.tools-section-title { font-family: var(--font-head); font-size: var(--fs-h2); font-weight: 700; color: var(--text); }
+.tools-count {
+  margin-left: auto;
+  font-family: var(--font-head);
+  font-size: var(--fs-eyebrow);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.tools-section-head .collapse-chevron { color: var(--text-faint); }
+.tools-section-head:focus-visible { outline: 2px solid var(--focus-border); outline-offset: 4px; border-radius: var(--r-md); }
+.tools-section.collapsed .collapse-chevron { transform: rotate(-90deg); }
+.tools-section.collapsed .tools-section-body { display: none; }
+.tools-section-body { margin-top: var(--sp-4); }
+.tools-search { width: 260px; max-width: 100%; margin-bottom: var(--sp-4); }
+.tools-add-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+.tools-note { margin: 0 0 var(--sp-4); }
+.tools-table-wrap { overflow-x: auto; }
+.tools-table td { vertical-align: middle; }
+.tools-table input { width: 100%; min-width: 120px; }
+.tools-actions-col { width: 1%; }
+.tools-actions { white-space: nowrap; }
+.tools-actions button + button { margin-left: var(--sp-2, 8px); }
+
+/* Undo button inside a toast. */
+.toast { display: flex; align-items: center; gap: var(--sp-4); }
+.toast-action {
+  flex: 0 0 auto;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  color: var(--text-on-dark);
+  border-radius: var(--r-md);
+  padding: 4px 12px;
+  font-family: var(--font-head);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.toast-action:hover { background: rgba(255, 255, 255, 0.12); }
+.toast-action:focus-visible { outline: 2px solid var(--text-on-dark); outline-offset: 2px; }
+
+@media (max-width: 560px) {
+  .tools-add-row { grid-template-columns: minmax(0, 1fr); }
+  .tools-search { width: 100%; }
+}
+
+/* Access-code field inside the confirmation popup. */
+.confirm-dialog-label { margin-top: calc(-1 * var(--sp-2, 8px)); }
+.confirm-dialog input { width: 100%; }
+.confirm-dialog-error {
+  min-height: 1.4em;
+  margin: 6px 0 var(--sp-3);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--danger-fg);
+}
+:root[data-theme="dark"] .confirm-dialog-error { color: #F2B8C2; }
+#exportTimingBtn { width: 100%; }

@@ -188,7 +188,11 @@ async function apiRequest(path, { method = 'GET', body } = {}) {
 //
 // `danger` paints the confirm button red and puts focus on Cancel, so an
 // accidental Enter never deletes anything.
-function confirmDialog({ title = 'Are you sure?', message = '', confirmText = 'Confirm', cancelText = 'Cancel', danger = false } = {}) {
+//
+// With `input` ({ label, type, placeholder }) the popup also asks for a value
+// and resolves to that string instead of true. `onConfirm(value)` runs before
+// it closes: return an error message to keep the popup open and show it.
+function confirmDialog({ title = 'Are you sure?', message = '', confirmText = 'Confirm', cancelText = 'Cancel', danger = false, input = null, onConfirm = null } = {}) {
   return new Promise((resolve) => {
     const dialog = document.createElement('dialog');
     dialog.className = 'confirm-dialog' + (danger ? ' danger' : '');
@@ -211,6 +215,27 @@ function confirmDialog({ title = 'Are you sure?', message = '', confirmText = 'C
       box.appendChild(p);
     }
 
+    let field = null;
+    let errorLine = null;
+    if (input) {
+      const label = document.createElement('label');
+      label.className = 'confirm-dialog-label';
+      label.textContent = input.label || 'Value';
+      label.setAttribute('for', 'confirmDialogInput');
+      field = document.createElement('input');
+      field.id = 'confirmDialogInput';
+      field.type = input.type || 'text';
+      field.autocomplete = 'off';
+      if (input.placeholder) field.placeholder = input.placeholder;
+      errorLine = document.createElement('p');
+      errorLine.className = 'confirm-dialog-error';
+      errorLine.setAttribute('role', 'alert');
+      box.append(label, field, errorLine);
+      field.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); confirm(); }
+      });
+    }
+
     const actions = document.createElement('div');
     actions.className = 'confirm-dialog-actions';
     const cancelBtn = document.createElement('button');
@@ -224,29 +249,66 @@ function confirmDialog({ title = 'Are you sure?', message = '', confirmText = 'C
     actions.append(cancelBtn, okBtn);
     box.appendChild(actions);
 
-    let answer = false;
-    const close = (value) => { answer = value; dialog.close(); };
-    cancelBtn.addEventListener('click', () => close(false));
-    okBtn.addEventListener('click', () => close(true));
-    // Only the backdrop reaches the dialog element itself (see the box above).
-    dialog.addEventListener('click', (e) => { if (e.target === dialog) close(false); });
-    dialog.addEventListener('close', () => {
+    // Settles right away rather than waiting for the dialog's `close` event,
+    // which the browser queues and can hold back while the tab isn't drawing.
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      if (dialog.open) dialog.close();
       dialog.remove();
-      resolve(answer);
-    });
+      resolve(value);
+    };
+    async function confirm() {
+      const value = field ? field.value : true;
+      if (onConfirm) {
+        okBtn.disabled = true;
+        let error;
+        try { error = await onConfirm(value); } catch (err) { error = err.message || 'Something went wrong.'; }
+        okBtn.disabled = false;
+        if (error) {
+          if (errorLine) errorLine.textContent = error;
+          if (field) { field.select(); field.focus(); }
+          return;
+        }
+      }
+      finish(value);
+    }
+    cancelBtn.addEventListener('click', () => finish(false));
+    okBtn.addEventListener('click', confirm);
+    // Only the backdrop reaches the dialog element itself (see the box above).
+    dialog.addEventListener('click', (e) => { if (e.target === dialog) finish(false); });
+    // Esc
+    dialog.addEventListener('cancel', (e) => { e.preventDefault(); finish(false); });
+    dialog.addEventListener('close', () => finish(false));
 
     document.body.appendChild(dialog);
     dialog.showModal();
-    (danger ? cancelBtn : okBtn).focus();
+    (field || (danger ? cancelBtn : okBtn)).focus();
   });
 }
 
-function showToast(message, type = '') {
+// `action` adds a button to the toast, e.g. { text: 'Undo', onClick }. A toast
+// with a button stays up longer so there is time to reach it.
+function showToast(message, type = '', action = null) {
   const existing = document.querySelector('.toast');
   if (existing) existing.remove();
   const toast = document.createElement('div');
   toast.className = `toast ${type}`.trim();
-  toast.textContent = message;
+  const text = document.createElement('span');
+  text.textContent = message;
+  toast.appendChild(text);
+  if (action && action.text) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'toast-action';
+    btn.textContent = action.text;
+    btn.addEventListener('click', () => {
+      toast.remove();
+      action.onClick();
+    });
+    toast.appendChild(btn);
+  }
   document.body.appendChild(toast);
-  setTimeout(() => toast.remove(), 4000);
+  setTimeout(() => toast.remove(), action ? 8000 : 4000);
 }
