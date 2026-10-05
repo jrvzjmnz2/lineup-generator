@@ -38,10 +38,12 @@
     alertBox.innerHTML = `<div class="alert alert-${type}">${message}</div>`;
   }
 
+  // `label` is plain text, or { html } for a label that is already escaped.
   function checkItem(id, name, value, label) {
     const wrapper = document.createElement('label');
     wrapper.className = 'check-item';
-    wrapper.innerHTML = `<input type="checkbox" name="${name}" value="${escapeAttr(value)}" id="${id}" /> <span>${escapeHtml(label)}</span>`;
+    const text = typeof label === 'object' ? label.html : escapeHtml(label);
+    wrapper.innerHTML = `<input type="checkbox" name="${name}" value="${escapeAttr(value)}" id="${id}" /> <span>${text}</span>`;
     const input = wrapper.querySelector('input');
     input.addEventListener('change', () => wrapper.classList.toggle('checked', input.checked));
     return wrapper;
@@ -117,13 +119,20 @@
       evHead.textContent = 'Events';
       box.appendChild(evHead);
 
+      // Events take one full-width row each so the date and call time line
+      // up and long names don't wrap into a narrow column.
       const evGrid = document.createElement('div');
-      evGrid.className = 'checkbox-grid';
+      evGrid.className = 'checkbox-grid single-column';
       groupEvents.forEach((ev) => {
         // A consecutive-day event shows its whole range: "9/16/2026 – 9/18/2026".
         const when = ev.endDate ? `${formatDate(ev.date)} – ${formatDate(ev.endDate)}` : formatDate(ev.date);
-        const label = `${ev.name} — ${when} — ${ev.location}`;
-        evGrid.appendChild(checkItem(`ev_${ev._id}`, 'events', ev._id, label));
+        const parts = [
+          escapeHtml(ev.name),
+          `<strong>${escapeHtml(when)}</strong>`,
+          ev.callTime ? `<strong>Call time: ${escapeHtml(ev.callTime)}</strong>` : '',
+          escapeHtml(ev.location),
+        ].filter(Boolean);
+        evGrid.appendChild(checkItem(`ev_${ev._id}`, 'events', ev._id, { html: parts.join(' — ') }));
       });
       box.appendChild(evGrid);
 

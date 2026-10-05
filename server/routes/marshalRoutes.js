@@ -25,7 +25,7 @@ const router = express.Router();
 // group -- events saved before types existed can be lined up in anything.
 router.get('/events', requireAuth, async (req, res) => {
   const events = await Event.find(OPEN_FOR_SIGNUP)
-    .select('name date endDate location eventType')
+    .select('name date endDate location eventType callTime')
     .sort({ date: 1 })
     .lean();
 

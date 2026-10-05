@@ -22,7 +22,7 @@ router.get('/options', async (req, res) => {
   try {
     const [employees, events] = await Promise.all([
       Employee.find().collation({ locale: 'en', strength: 2 }).sort({ name: 1 }).select('_id name team').lean(),
-      Event.find(EXCLUSIVE_ACTIVE).select('name date endDate location eventType').sort({ date: 1 }).lean(),
+      Event.find(EXCLUSIVE_ACTIVE).select('name date endDate location eventType callTime').sort({ date: 1 }).lean(),
     ]);
     res.json({ employees, events });
   } catch (err) {

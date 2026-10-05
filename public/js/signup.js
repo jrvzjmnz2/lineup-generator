@@ -46,8 +46,16 @@
       input.type = 'checkbox';
       input.name = 'events';
       input.value = ev._id;
+      // Name — date — call time — location, with the date and call time bold.
       const text = document.createElement('span');
-      text.textContent = `${ev.name} — ${when} — ${ev.location}`;
+      const bold = (value) => { const b = document.createElement('strong'); b.textContent = value; return b; };
+      const pieces = [ev.name, bold(when)];
+      if (ev.callTime) pieces.push(bold(`Call time: ${ev.callTime}`));
+      pieces.push(ev.location);
+      pieces.forEach((piece, i) => {
+        if (i) text.append(' — ');
+        text.append(piece);
+      });
       label.append(input, ' ', text);
       input.addEventListener('change', () => label.classList.toggle('checked', input.checked));
       eventList.appendChild(label);

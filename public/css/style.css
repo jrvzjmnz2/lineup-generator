@@ -2328,3 +2328,10 @@ label {
 }
 :root[data-theme="dark"] .confirm-dialog-error { color: #F2B8C2; }
 #exportTimingBtn { width: 100%; }
+
+/* Sign-up forms: the event list is one option per row. */
+.checkbox-grid.single-column { grid-template-columns: minmax(0, 1fr); }
+/* Option text drops to normal weight here so the bold date and call time
+   actually stand out (check-item labels are 600 by default). */
+.checkbox-grid.single-column .check-item span { font-weight: 400; }
+.check-item strong { font-weight: 700; color: var(--text); }
