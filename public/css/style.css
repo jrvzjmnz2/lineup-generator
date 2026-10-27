@@ -2335,3 +2335,26 @@ label {
    actually stand out (check-item labels are 600 by default). */
 .checkbox-grid.single-column .check-item span { font-weight: 400; }
 .check-item strong { font-weight: 700; color: var(--text); }
+
+/* =====================  ALL EVENTS: GROUPED BY TYPE  ==================== */
+/* One panel per event type; the completed cards sit in a grid inside it. */
+.type-group-list { display: flex; flex-direction: column; gap: var(--sp-5); }
+.type-group-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+  padding-bottom: var(--sp-3);
+  border-bottom: 1px solid var(--line);
+}
+.type-group-head h2 { margin: 0; font-size: var(--fs-h2); }
+.type-group-count {
+  font-family: var(--font-head);
+  font-size: var(--fs-eyebrow);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}

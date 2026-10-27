@@ -1816,19 +1816,57 @@
     renderAllEvents();
   });
 
+  // Completed events are grouped by event type, one panel per type, in the
+  // catalogue's order (Timing, Kit Claiming, ...), with untyped legacy events
+  // last. Inside a panel the events keep the server's date order. Types with
+  // nothing completed this month are left out.
   function renderAllEvents() {
     allEventsGrid.innerHTML = '';
     if (allEventsData.length === 0) {
       allEventsGrid.innerHTML = '<div class="empty-state">No completed events in this month.</div>';
       return;
     }
+
+    const UNTYPED = 'Untyped';
+    const byType = new Map();
     allEventsData.forEach((ev) => {
-      const wrapper = document.createElement('div');
-      wrapper.className = 'event-card-wrapper';
-      const card = buildEventCard(ev, { editable: false });
-      wrapper.appendChild(card);
-      makeCollapsible(wrapper, card, ev, { withPool: false });
-      allEventsGrid.appendChild(wrapper);
+      const key = ev.eventType || UNTYPED;
+      if (!byType.has(key)) byType.set(key, []);
+      byType.get(key).push(ev);
+    });
+    const order = eventTypes.map((t) => t.name);
+    const keys = [...byType.keys()].sort((a, b) => {
+      const rank = (k) => (k === UNTYPED ? Infinity : (order.indexOf(k) === -1 ? order.length : order.indexOf(k)));
+      return rank(a) - rank(b) || a.localeCompare(b);
+    });
+
+    keys.forEach((type) => {
+      const events = byType.get(type);
+      const group = document.createElement('section');
+      group.className = 'card-panel type-group';
+
+      const head = document.createElement('div');
+      head.className = 'type-group-head';
+      const title = document.createElement('h2');
+      title.textContent = type;
+      const count = document.createElement('span');
+      count.className = 'type-group-count';
+      count.textContent = `${events.length} event${events.length === 1 ? '' : 's'}`;
+      head.append(title, count);
+      group.appendChild(head);
+
+      const grid = document.createElement('div');
+      grid.className = 'event-grid';
+      events.forEach((ev) => {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'event-card-wrapper';
+        const card = buildEventCard(ev, { editable: false });
+        wrapper.appendChild(card);
+        makeCollapsible(wrapper, card, ev, { withPool: false });
+        grid.appendChild(wrapper);
+      });
+      group.appendChild(grid);
+      allEventsGrid.appendChild(group);
     });
   }
 
