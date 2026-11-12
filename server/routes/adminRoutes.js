@@ -626,6 +626,30 @@ router.put('/marshals/:id/rating', async (req, res) => {
   }
 });
 
+// PUT /api/admin/marshals/:id/nda { nda: true|false } -- tick or untick the
+// marshal's NDA box on the Marshal List.
+router.put('/marshals/:id/nda', async (req, res) => {
+  try {
+    const { nda } = req.body || {};
+    if (typeof nda !== 'boolean') return res.status(400).json({ error: 'nda must be true or false' });
+    const marshal = await Marshal.findByIdAndUpdate(
+      req.params.id,
+      { $set: { nda, ndaUpdatedAt: new Date() } },
+      { new: true }
+    ).lean();
+    if (!marshal) return res.status(404).json({ error: 'Marshal not found' });
+    await logActivity(req, {
+      action: 'marshal.nda',
+      targetName: `${marshal.firstName} ${marshal.lastName}`.trim(),
+      detail: nda ? 'signed' : 'unticked',
+    });
+    res.json({ marshal });
+  } catch (err) {
+    console.error('NDA update error:', err);
+    res.status(500).json({ error: 'Could not update the NDA status.' });
+  }
+});
+
 // PUT /api/admin/events/:id -- edit event details / logistics
 //
 // Limited to the event's own type's fields -- e.g. a Fulfillment event can't

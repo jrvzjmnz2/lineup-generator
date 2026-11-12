@@ -1988,6 +1988,7 @@
       <th>Roles Interested</th>
       <th>Events Attended</th>
       <th>Rating</th>
+      <th>NDA</th>
     </tr></thead>`;
 
     const tbody = document.createElement('tbody');
@@ -2046,6 +2047,8 @@
       ratingControl.appendChild(select);
       ratingTd.appendChild(ratingControl);
       tr.appendChild(ratingTd);
+
+      tr.appendChild(buildNdaCell(m));
 
       tbody.appendChild(tr);
     });
@@ -2362,6 +2365,55 @@
     } catch (err) {
       showToast(err.message, 'error');
     }
+  }
+
+  // NDA checkbox on a Marshal List row. Both ticking and unticking ask
+  // first; the box only changes once the server has saved it.
+  function buildNdaCell(m) {
+    const td = document.createElement('td');
+    const label = document.createElement('label');
+    label.className = 'nda-check' + (m.nda ? ' checked' : '');
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.checked = Boolean(m.nda);
+    box.setAttribute('aria-label', `NDA signed by ${m.firstName} ${m.lastName}`);
+    const text = document.createElement('span');
+    text.textContent = 'NDA';
+    label.append(box, text);
+
+    box.addEventListener('change', async () => {
+      const want = box.checked;
+      box.checked = !want; // hold the old state until confirmed and saved
+      const name = `${m.firstName} ${m.lastName}`;
+      const ok = await confirmDialog(want
+        ? {
+          title: 'Mark NDA as signed?',
+          message: `${name} will be marked as having signed the NDA.`,
+          confirmText: 'Mark signed',
+        }
+        : {
+          title: 'Remove NDA mark?',
+          message: `${name} will no longer be marked as having signed the NDA.`,
+          confirmText: 'Remove mark',
+          danger: true,
+        });
+      if (!ok) return;
+      box.disabled = true;
+      try {
+        const { marshal } = await apiRequest(`/admin/marshals/${m._id}/nda`, { method: 'PUT', body: { nda: want } });
+        m.nda = Boolean(marshal.nda);
+        box.checked = m.nda;
+        label.classList.toggle('checked', m.nda);
+        showToast(m.nda ? `NDA marked as signed for ${name}.` : `NDA mark removed for ${name}.`, 'success');
+      } catch (err) {
+        showToast(err.message, 'error');
+      } finally {
+        box.disabled = false;
+      }
+    });
+
+    td.appendChild(label);
+    return td;
   }
 
   async function updateMarshalRating(marshalId, value, swatchEl) {

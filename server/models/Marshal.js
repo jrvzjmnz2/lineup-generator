@@ -41,6 +41,10 @@ const marshalSchema = new mongoose.Schema(
     // the marshal's own form submission -- only editable from the Marshal
     // List admin tab, and persists across resubmissions.
     rating: { type: Number, min: 1, max: 10, default: null },
+    // Whether the marshal has signed the NDA. Admin-set from the Marshal List
+    // and, like `rating`, never touched by the marshal's own resubmission.
+    nda: { type: Boolean, default: false },
+    ndaUpdatedAt: { type: Date, default: null },
   },
   { timestamps: true, collection: 'marshal' }
 );

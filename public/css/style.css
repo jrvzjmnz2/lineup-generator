@@ -2358,3 +2358,19 @@ label {
   color: var(--text-faint);
   font-variant-numeric: tabular-nums;
 }
+/* Marshal List: NDA checkbox. */
+.nda-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 5px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  cursor: pointer;
+  white-space: nowrap;
+  color: var(--text);
+}
+.nda-check input { width: auto; margin: 0; accent-color: var(--maroon); }
+.nda-check.checked { border-color: rgba(99, 10, 31, 0.4); background: var(--wash-maroon); }
+:root[data-theme="dark"] .nda-check.checked { border-color: rgba(217, 217, 217, 0.55); }

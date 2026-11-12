@@ -18,6 +18,7 @@ const ACTIONS = {
   'employee.edit': 'Edited employee',
   'employee.delete': 'Deleted employee',
   'marshal.edit': 'Edited marshal',
+  'marshal.nda': 'NDA',
   'export.timing': 'Exported Timing events',
   'export.denied': 'Export refused',
 };
